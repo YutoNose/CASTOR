@@ -64,3 +64,14 @@ Thumbs.db
 
 # uv
 uv.lock
+
+# Generated outputs (analysis results)
+outputs/
+
+# One-off analysis scripts
+scripts/
+
+# Data files
+*.h5ad
+*.csv
+!tests/**/*.csv

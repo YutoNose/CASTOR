@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -12,19 +13,37 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-def fetch_orthologs(output_path: str | None = None) -> pd.DataFrame:
+_CACHE_DIR = Path.home() / ".cache" / "castor"
+_ORTHO_CACHE = _CACHE_DIR / "orthologs_mouse_human.csv"
+
+
+def fetch_orthologs(
+    output_path: str | None = None,
+    *,
+    use_cache: bool = True,
+) -> pd.DataFrame:
     """Fetch mouse-to-human ortholog mapping from Ensembl BioMart.
+
+    Results are cached locally at ``~/.cache/castor/orthologs_mouse_human.csv``
+    so subsequent calls avoid network requests.
 
     Parameters
     ----------
     output_path : str | None
-        Save mapping CSV to this path.
+        Save mapping CSV to this path (in addition to cache).
+    use_cache : bool
+        If *True* (default), reuse a previously downloaded mapping.
 
     Returns
     -------
     pd.DataFrame
         Columns: ``mouse_gene``, ``human_gene``.
     """
+    # Try local cache first
+    if use_cache and _ORTHO_CACHE.exists():
+        logger.info("Loading cached orthologs from %s", _ORTHO_CACHE)
+        return pd.read_csv(_ORTHO_CACHE)
+
     xml_query = """
     <!DOCTYPE Query>
     <Query virtualSchemaName="default" formatter="CSV" header="0"
@@ -49,6 +68,11 @@ def fetch_orthologs(output_path: str | None = None) -> pd.DataFrame:
     df = pd.DataFrame(data, columns=["mouse_gene", "human_gene"])
     df = df.dropna()
     df = df[df["human_gene"] != ""]
+
+    # Save to cache
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    df.to_csv(_ORTHO_CACHE, index=False)
+    logger.info("Orthologs cached to %s (%d mappings)", _ORTHO_CACHE, len(df))
 
     if output_path:
         df.to_csv(output_path, index=False)
@@ -93,6 +117,9 @@ def run_pathway_enrichment(
     """
     import gseapy as gp
 
+    # Suppress noisy gseapy ERROR logs (they duplicate our own warnings)
+    logging.getLogger("gseapy").setLevel(logging.CRITICAL)
+
     empty = pd.DataFrame(
         columns=["Pathway", "Enrichment_Score", "P_value", "Q_value", "Genes", "Gene_Count"]
     )
@@ -105,18 +132,16 @@ def run_pathway_enrichment(
     if "Gene" not in df.columns or rank_col not in df.columns:
         raise ValueError(f"gene_ranking must have 'Gene' and '{rank_col}' columns")
 
-    # Mouse → human mapping
-    if species.lower() == "mouse":
-        if orthologs is None:
-            raise ValueError("orthologs mapping required for mouse genes")
+    # Mouse → human ortholog mapping (if available), then uppercase for Enrichr
+    if species.lower() == "mouse" and orthologs is not None:
         mapping = dict(
             zip(orthologs["mouse_gene"].str.upper(), orthologs["human_gene"].str.upper())
         )
-        df["Gene_Upper"] = df["Gene"].str.upper()
-        df["Human_Gene"] = df["Gene_Upper"].map(mapping)
-        df = df.dropna(subset=["Human_Gene"])
-        df["Gene"] = df["Human_Gene"]
-        df = df.drop(columns=["Gene_Upper", "Human_Gene"])
+        df["Gene"] = df["Gene"].str.upper().map(mapping).fillna(df["Gene"].str.upper())
+    else:
+        # Enrichr gene sets use uppercase symbols; uppercase handles both
+        # human genes and mouse genes whose symbols match human orthologs
+        df["Gene"] = df["Gene"].str.upper()
 
     df = df.groupby("Gene")[rank_col].max().reset_index()
 

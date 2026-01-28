@@ -105,7 +105,7 @@ def plot_castor_results(
     axes = axes.flatten()
 
     # A -- Spatial layout
-    axes[0].scatter(coords[:, 0], coords[:, 1], s=0.5, c="lightgrey", alpha=0.6)
+    axes[0].scatter(coords[:, 0], coords[:, 1], s=4, c="lightgrey", alpha=0.6)
     axes[0].set_title("A. Spatial Layout", fontsize=10, fontweight="bold")
     axes[0].set_xlabel("spatial1")
     axes[0].set_ylabel("spatial2")
@@ -113,7 +113,7 @@ def plot_castor_results(
 
     # B -- Final anomaly score
     final = np.maximum(results["Local_Z"].values, results["Global_Z"].values)
-    sc = axes[1].scatter(coords[:, 0], coords[:, 1], s=0.5, c=final, cmap="viridis", alpha=0.6)
+    sc = axes[1].scatter(coords[:, 0], coords[:, 1], s=4, c=final, cmap="viridis", alpha=0.6)
     axes[1].set_title("B. CASTOR Final Anomaly Score", fontsize=10, fontweight="bold")
     axes[1].set_xlabel("spatial1")
     axes[1].set_ylabel("spatial2")
@@ -127,7 +127,7 @@ def plot_castor_results(
             axes[2].scatter(
                 coords[mask, 0],
                 coords[mask, 1],
-                s=0.5,
+                s=4,
                 c=color,
                 label=f"{diag} ({mask.sum()})",
                 alpha=0.6,
@@ -143,7 +143,7 @@ def plot_castor_results(
     sc = axes[3].scatter(
         coords[:, 0],
         coords[:, 1],
-        s=0.5,
+        s=4,
         c=results["Local_Z"],
         cmap="Reds",
         vmin=-2,
@@ -161,7 +161,7 @@ def plot_castor_results(
     sc = axes[4].scatter(
         coords[:, 0],
         coords[:, 1],
-        s=0.5,
+        s=4,
         c=results["Global_Z"],
         cmap="Blues",
         vmin=-2,

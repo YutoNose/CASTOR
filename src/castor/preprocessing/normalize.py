@@ -149,11 +149,18 @@ def prepare_from_anndata(
 
     adata = adata.copy()
 
+    # Preprocessing order: normalize -> filter -> log1p -> HVG
     if adata.X.max() > 100:
         sc.pp.normalize_total(adata, target_sum=1e4)
 
+    # Filter genes with zero expression to avoid issues in HVG
+    sc.pp.filter_genes(adata, min_cells=3)
+
+    # log1p BEFORE HVG (HVG expects log-transformed data for 'seurat' flavor)
+    sc.pp.log1p(adata)
+
     if n_top_genes < adata.n_vars:
-        sc.pp.highly_variable_genes(adata, n_top_genes=n_top_genes)
+        sc.pp.highly_variable_genes(adata, n_top_genes=n_top_genes, flavor="seurat")
         adata = adata[:, adata.var["highly_variable"]]
 
     X = adata.X.toarray() if sparse.issparse(adata.X) else np.asarray(adata.X)
@@ -165,4 +172,7 @@ def prepare_from_anndata(
     else:
         raise ValueError("No spatial coordinates found in adata.obsm")
 
-    return prepare_data(X, coords, k=k, device=device, log_transform=True, scale=True)
+    # log_transform=False because we already applied log1p above
+    data = prepare_data(X, coords, k=k, device=device, log_transform=False, scale=True)
+    data["gene_names"] = adata.var_names.tolist()
+    return data
