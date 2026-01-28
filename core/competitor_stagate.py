@@ -149,8 +149,8 @@ def compute_stagate_score(
             f"rad_cutoff={rad_cutoff} may be too small for this dataset."
         )
 
-    # Train STAGATE (device is auto-selected by PyTorch)
-    with warnings.catch_warnings():
+    # Train STAGATE on CPU (RTX 5090 compute capability 12.0 not supported by TF CUDA kernels)
+    with warnings.catch_warnings(), tf.device('/CPU:0'):
         warnings.simplefilter("ignore")
         STAGATE.train_STAGATE(
             adata,
@@ -242,7 +242,7 @@ def compute_stagate_embedding(
     if "Spatial_Net" not in adata.uns or adata.uns["Spatial_Net"].shape[0] == 0:
         raise RuntimeError("STAGATE failed to build spatial network")
 
-    with warnings.catch_warnings():
+    with warnings.catch_warnings(), tf.device('/CPU:0'):
         warnings.simplefilter("ignore")
         STAGATE.train_STAGATE(
             adata,
