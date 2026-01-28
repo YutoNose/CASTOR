@@ -71,7 +71,21 @@ outputs/
 # One-off analysis scripts
 scripts/
 
-# Data files
+# Data files (large binary/data formats)
 *.h5ad
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.parquet
 *.csv
 !tests/**/*.csv
+
+# Large experiment results (JSON/pickle)
+experiments/results/
+
+# Ruff cache
+.ruff_cache/
+
+# Claude
+.claude/
