@@ -84,6 +84,9 @@ scripts/
 # Large experiment results (JSON/pickle)
 experiments/results/
 
+# Experiment data cache
+experiments/data/
+
 # Ruff cache
 .ruff_cache/
 

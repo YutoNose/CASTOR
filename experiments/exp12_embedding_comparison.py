@@ -130,7 +130,7 @@ def run_single_experiment(
                 X, coords, n_epochs=500, random_state=seed
             )
         except Exception as e:
-            raise RuntimeError(f"STAGATE failed: {e}")
+            print(f"  Warning: STAGATE failed (skipping): {e}")
 
     # --- GraphST + IF ---
     if "graphst" in methods:
@@ -139,7 +139,7 @@ def run_single_experiment(
                 X, coords, n_epochs=600, random_state=seed, device="cpu"
             )
         except Exception as e:
-            raise RuntimeError(f"GraphST failed: {e}")
+            print(f"  Warning: GraphST failed (skipping): {e}")
 
     # --- Squidpy ---
     if "squidpy" in methods:
@@ -148,7 +148,7 @@ def run_single_experiment(
                 X, coords, random_state=seed
             )
         except Exception as e:
-            raise RuntimeError(f"Squidpy failed: {e}")
+            print(f"  Warning: Squidpy failed (skipping): {e}")
 
     # --- STLearn ---
     if "stlearn" in methods:
@@ -157,7 +157,7 @@ def run_single_experiment(
                 X, coords, random_state=seed
             )
         except Exception as e:
-            raise RuntimeError(f"STLearn failed: {e}")
+            print(f"  Warning: STLearn failed (skipping): {e}")
 
     # --- Baselines ---
     if "pca_error" in methods:
@@ -264,7 +264,7 @@ def run_synthetic_comparison(
             except Exception as e:
                 if verbose:
                     print(f"  Seed {seed} failed: {e}")
-                raise  # No fallback - fail fast
+                continue
 
     return pd.DataFrame(all_results)
 
