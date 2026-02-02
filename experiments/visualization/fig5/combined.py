@@ -19,10 +19,14 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+import os
+
 from common import (
     set_nature_style, save_figure, add_panel_label,
     COLORS, SINGLE_COL, DOUBLE_COL, RESULTS_DIR
 )
+
+HER2ST_DIR = Path(os.environ.get("HER2ST_DIR", "/home/yutonose/Projects/her2st"))
 
 # Method display mapping for HER2ST data
 # Support both old column names (auc_pos, auc_pca) and new names (auc_inv_pos, auc_pca_error)
@@ -191,7 +195,7 @@ def _draw_spatial_panel(ax):
     # Load coordinates
     try:
         from data.generators.her2st import HER2STDataLoader
-        loader = HER2STDataLoader("/home/yutonose/Projects/her2st")
+        loader = HER2STDataLoader(str(HER2ST_DIR))
         X, coords, _, meta = loader.load('G2')
         pixel_coords = meta.get('pixel_coords')
     except Exception:
@@ -200,7 +204,7 @@ def _draw_spatial_panel(ax):
 
     # Load tissue image
     from PIL import Image
-    img_dir = Path("/home/yutonose/Projects/her2st/data/ST-imgs/G/G2")
+    img_dir = HER2ST_DIR / "data" / "ST-imgs" / "G" / "G2"
     img = None
     if img_dir.exists():
         for f in img_dir.glob("*.jpg"):

@@ -43,6 +43,7 @@ from .evaluation import (
 from .data_generation import (
     generate_synthetic_data,
     generate_controlled_ectopic,
+    inject_clustered_ectopic,
 )
 from .scenarios import (
     SCENARIOS,
@@ -95,6 +96,7 @@ __all__ = [
     # Data generation
     "generate_synthetic_data",
     "generate_controlled_ectopic",
+    "inject_clustered_ectopic",
     # Scenarios
     "SCENARIOS",
     "generate_scenario_data",

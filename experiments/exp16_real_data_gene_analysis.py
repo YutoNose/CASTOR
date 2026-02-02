@@ -375,7 +375,7 @@ def run(config: ExperimentConfig = None, verbose: bool = True) -> pd.DataFrame:
     if config is None:
         config = DEFAULT_CONFIG
 
-    her2st_dir = "/home/yutonose/Projects/her2st"
+    her2st_dir = config.her2st_dir
     output_dir = os.path.join(RESULTS_DIR, "exp16_gene_analysis")
 
     # Check if HER2ST data is available
@@ -422,7 +422,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--her2st-dir", type=str,
-                        default="/home/yutonose/Projects/her2st")
+                        default=DEFAULT_CONFIG.her2st_dir)
     parser.add_argument("--samples", nargs="+", default=None)
     parser.add_argument("--seeds", type=int, default=5)
     parser.add_argument("--output", type=str,

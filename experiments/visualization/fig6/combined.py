@@ -22,6 +22,7 @@ import matplotlib.patches as mpatches
 from matplotlib.colors import ListedColormap
 from pathlib import Path
 from PIL import Image
+import os
 import sys
 import warnings
 warnings.filterwarnings('ignore')
@@ -35,7 +36,7 @@ from common import (
     COLORS, SINGLE_COL, DOUBLE_COL, RESULTS_DIR,
 )
 
-HER2ST_DIR = Path("/home/yutonose/Projects/her2st")
+HER2ST_DIR = Path(os.environ.get("HER2ST_DIR", "/home/yutonose/Projects/her2st"))
 IMG_DIR = HER2ST_DIR / "data" / "ST-imgs"
 
 # Method display config
@@ -154,7 +155,7 @@ def _draw_tissue_with_labels(ax, sample_data, sample_id):
                 ax.scatter(coords[mask, 0], coords[mask, 1],
                            c=color, s=15, alpha=0.7, label=label,
                            edgecolors='gray', linewidths=0.3)
-        ax.legend(fontsize=4, loc='lower left')
+        ax.legend(fontsize=5, loc='lower left')
 
     ax.axis('off')
 
@@ -230,7 +231,7 @@ def _draw_transplant_overlay(ax, sample_data, sample_id, seed=42):
                    edgecolors='black', linewidths=0.8, zorder=10,
                    label=f'Transplanted (n={n_transplant})')
 
-    ax.legend(fontsize=4, loc='lower left', framealpha=0.8,
+    ax.legend(fontsize=5, loc='lower left', framealpha=0.8,
               markerscale=1.2, handletextpad=0.3, labelspacing=0.3)
     ax.axis('off')
 

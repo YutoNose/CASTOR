@@ -36,7 +36,7 @@ def create_panel_a():
 
     fig, ax = plt.subplots(figsize=(SINGLE_COL * 0.9, SINGLE_COL * 1.1))
 
-    sns.heatmap(summary, annot=True, fmt='.2f', cmap='RdYlGn',
+    sns.heatmap(summary, annot=True, fmt='.2f', cmap='PuOr',
                 vmin=0, vmax=1, ax=ax,
                 cbar_kws={'shrink': 0.7, 'label': 'AUC'},
                 annot_kws={'size': 7})

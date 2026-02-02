@@ -346,7 +346,7 @@ def inject_ectopic_by_distance(
     donor_positions = coords.copy()
 
     # Calculate minimum distance threshold
-    coord_range = np.ptp(coords, axis=0)
+    coord_range = coords.max(axis=0) - coords.min(axis=0)
     min_dist = np.mean(coord_range) * min_distance_fraction
 
     # Select candidate spots

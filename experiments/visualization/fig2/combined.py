@@ -151,7 +151,7 @@ def create_panel_a():
     fig, ax = plt.subplots(figsize=(SINGLE_COL * 1.8, SINGLE_COL * 1.3))
 
     plot_data = heatmap_data[['Ectopic', 'Intrinsic', 'AUPRC\nEctopic', 'AUPRC\nIntrinsic']]
-    sns.heatmap(plot_data, annot=True, fmt='.2f', cmap='RdYlGn',
+    sns.heatmap(plot_data, annot=True, fmt='.2f', cmap='PuOr',
                 vmin=0, vmax=1, ax=ax,
                 cbar_kws={'shrink': 0.7, 'label': 'AUC', 'pad': 0.02},
                 annot_kws={'size': 7})
@@ -293,7 +293,7 @@ def _draw_heatmap_panel(ax):
     })
     heatmap_data = heatmap_data.sort_values('Ectopic', ascending=False)
 
-    sns.heatmap(heatmap_data, annot=True, fmt='.2f', cmap='RdYlGn',
+    sns.heatmap(heatmap_data, annot=True, fmt='.2f', cmap='PuOr',
                 vmin=0, vmax=1, ax=ax,
                 cbar_kws={'shrink': 0.7}, annot_kws={'size': 6})
     ax.set_xlabel('Anomaly Type', fontsize=7)
@@ -374,7 +374,7 @@ def _draw_selectivity_panel(ax):
     ax.set_ylabel('Intrinsic AUC', fontsize=7)
     ax.set_xlim(0.35, 1.0)
     ax.set_ylim(0.35, 1.0)
-    ax.legend(loc='center left', fontsize=4, bbox_to_anchor=(1.05, 0.5),
+    ax.legend(loc='center left', fontsize=5, bbox_to_anchor=(1.05, 0.5),
               markerscale=0.6, handletextpad=0.2)
     ax.set_aspect('equal')
 

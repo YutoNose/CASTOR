@@ -22,6 +22,7 @@ import matplotlib.colors as mcolors
 from matplotlib.patches import Patch
 from pathlib import Path
 from PIL import Image
+import os
 import sys
 import warnings
 warnings.filterwarnings('ignore')
@@ -35,7 +36,7 @@ from common import (
     COLORS, SINGLE_COL, DOUBLE_COL, RESULTS_DIR,
 )
 
-HER2ST_DIR = Path("/home/yutonose/Projects/her2st")
+HER2ST_DIR = Path(os.environ.get("HER2ST_DIR", "/home/yutonose/Projects/her2st"))
 IMG_DIR = HER2ST_DIR / "data" / "ST-imgs"
 
 
@@ -132,7 +133,7 @@ def _draw_tissue_error_map(ax, results_dir, sample_id):
     cbar.set_label('Position Error', fontsize=6)
     cbar.ax.tick_params(labelsize=5)
 
-    ax.legend(fontsize=4, loc='upper right', framealpha=0.8)
+    ax.legend(fontsize=5, loc='upper right', framealpha=0.8)
     ax.axis('off')
 
 
@@ -167,7 +168,7 @@ def _draw_volcano(ax, deg_df, sample_id):
         gene = row['gene']
         x = row[fc_col]
         y = -np.log10(max(row[pcol], 1e-300))
-        ax.annotate(gene, (x, y), fontsize=4, ha='center', va='bottom',
+        ax.annotate(gene, (x, y), fontsize=5, ha='center', va='bottom',
                     xytext=(0, 3), textcoords='offset points')
 
     ax.set_xlabel('log2 Fold Change\n(high error / low error)', fontsize=7)
@@ -212,7 +213,7 @@ def _draw_top_genes(ax, deg_df, n_genes=15):
         xpos = row[fc_col]
         align = 'left' if xpos >= 0 else 'right'
         offset = 0.02 if xpos >= 0 else -0.02
-        ax.text(xpos + offset, i, label, va='center', ha=align, fontsize=4, style='italic')
+        ax.text(xpos + offset, i, label, va='center', ha=align, fontsize=5, style='italic')
 
 
 def _draw_cancer_gene_overlap(ax, deg_df):
@@ -275,7 +276,7 @@ def _draw_cancer_gene_overlap(ax, deg_df):
     for i, (_, row) in enumerate(result_df.iterrows()):
         if row['category'] != prev_cat:
             ax.text(ax.get_xlim()[1] * 0.95, i, row['category'],
-                    fontsize=4, va='center', ha='right', style='italic', color='gray')
+                    fontsize=5, va='center', ha='right', style='italic', color='gray')
             prev_cat = row['category']
 
     ax.invert_yaxis()
@@ -285,7 +286,7 @@ def _draw_cancer_gene_overlap(ax, deg_df):
         Patch(facecolor=COLORS['inv_pos'], edgecolor='black', linewidth=0.3, label='Sig. Down'),
         Patch(facecolor='lightgray', edgecolor='black', linewidth=0.3, label='Not sig.'),
     ]
-    ax.legend(handles=legend_elements, fontsize=4, loc='lower right')
+    ax.legend(handles=legend_elements, fontsize=5, loc='lower right')
 
 
 # =============================================================================

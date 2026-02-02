@@ -137,7 +137,7 @@ def compute_stagate_score(
     # Build spatial graph
     if rad_cutoff is None:
         # Auto-compute radius based on data spread
-        coord_range = np.ptp(coords, axis=0)
+        coord_range = coords.max(axis=0) - coords.min(axis=0)
         rad_cutoff = np.sqrt(coord_range[0] * coord_range[1]) / 20
 
     STAGATE.Cal_Spatial_Net(adata, rad_cutoff=rad_cutoff)
@@ -234,7 +234,7 @@ def compute_stagate_embedding(
     sc.tl.pca(adata, n_comps=min(n_pcs, adata.n_vars - 1, adata.n_obs - 1))
 
     if rad_cutoff is None:
-        coord_range = np.ptp(coords, axis=0)
+        coord_range = coords.max(axis=0) - coords.min(axis=0)
         rad_cutoff = np.sqrt(coord_range[0] * coord_range[1]) / 20
 
     STAGATE.Cal_Spatial_Net(adata, rad_cutoff=rad_cutoff)

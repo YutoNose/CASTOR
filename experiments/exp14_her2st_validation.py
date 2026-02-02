@@ -369,7 +369,7 @@ def run(config: ExperimentConfig = None, verbose: bool = True) -> pd.DataFrame:
     if config is None:
         config = DEFAULT_CONFIG
 
-    her2st_dir = "/home/yutonose/Projects/her2st"
+    her2st_dir = config.her2st_dir
 
     results = run_her2st_validation(
         her2st_dir,
@@ -393,7 +393,7 @@ if __name__ == "__main__":
     parser.add_argument("--samples", nargs="+", default=None,
                         help="Specific samples to run")
     parser.add_argument("--her2st-dir", type=str,
-                        default="/home/yutonose/Projects/her2st")
+                        default=DEFAULT_CONFIG.her2st_dir)
     parser.add_argument("--output", type=str,
                         default=os.path.join(RESULTS_DIR, "exp14_her2st_validation.csv"))
     args = parser.parse_args()

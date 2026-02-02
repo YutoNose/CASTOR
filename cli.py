@@ -85,6 +85,8 @@ EXPERIMENTS = {
     16: ("Gene Contribution", "exp16_real_data_gene_analysis", "exp16_gene_analysis_summary.csv"),
     17: ("HER2ST Transplantation", "exp17_her2st_transplantation", "exp17_transplantation.csv"),
     18: ("Interpretability", "exp18_interpretability", "exp18_interpretability.csv"),
+    19: ("Clustered Ectopic", "exp19_clustered_ectopic", "exp19_clustered_ectopic.csv"),
+    20: ("Region Transplantation", "exp20_region_transplantation", "exp20_region_transplantation.csv"),
 }
 
 # =============================================================================
@@ -105,6 +107,8 @@ FIGURES = {
     "S4": ("Statistics", "figS4", ["a", "b", "c", "d"]),
     "S5": ("Scalability", "figS5", ["a", "b", "c"]),
     "S6": ("Synthetic Data", "figS6", ["a", "b", "c", "d"]),
+    "8": ("Clustered Advantage", "fig8", ["a", "b", "c"]),
+    "9": ("Region Transplantation", "fig9", ["a", "b", "c", "d"]),
 }
 
 # =============================================================================

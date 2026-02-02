@@ -263,7 +263,7 @@ def run_single_seed(
 
         # Position prediction analysis
         coords_min = coords_test.min(axis=0)
-        coords_range = np.ptp(coords_test, axis=0) + 1e-8
+        coords_range = (coords_test.max(axis=0) - coords_test.min(axis=0)) + 1e-8
         pos_pred_denorm = scores["pos_pred"] * coords_range + coords_min
 
         ectopic_local = np.where(ectopic_mask)[0]

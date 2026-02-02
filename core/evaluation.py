@@ -261,6 +261,7 @@ def statistical_tests(
     method2_col: str,
     alpha: float = 0.05,
     correction: str = "bonferroni",
+    n_comparisons: int = 1,
 ) -> Dict[str, float]:
     """
     Perform statistical significance tests with multiple testing correction.
@@ -274,9 +275,11 @@ def statistical_tests(
     method1_col, method2_col : str
         Column names for the two methods to compare
     alpha : float
-        Significance level
+        Significance level (before correction)
     correction : str
         Multiple testing correction method ('bonferroni' or 'none')
+    n_comparisons : int
+        Number of comparisons for Bonferroni correction
 
     Returns
     -------
@@ -309,27 +312,30 @@ def statistical_tests(
             "n_samples": len(values1),
         }
 
-    # Effect size: rank-biserial correlation for Wilcoxon signed-rank
-    # scipy.stats.wilcoxon returns min(W+, W-) as the test statistic
-    # Rank-biserial correlation: r = 1 - 4*W / (n*(n+1))
-    # When W is small (most ranks go one direction), r approaches ±1
-    # When W is at its maximum n*(n+1)/4, r = 0
     n = len(values1)
-    effect_size = 1 - 4 * stat / (n * (n + 1))
 
-    # Apply multiple testing correction if requested
-    if correction == "bonferroni":
-        # Note: n_comparisons should be passed externally for proper correction
-        # Default assumes single comparison (no correction applied here)
-        pass  # Correction should be applied at the caller level with n_comparisons
+    # Effect size: matched-pairs rank-biserial correlation (Kerby 2014)
+    # |r| < 0.1 negligible, 0.1-0.3 small, 0.3-0.5 medium, > 0.5 large
+    # stat = min(W+, W-), so magnitude = 1 - 4*stat/(n*(n+1))
+    # Sign from mean difference to indicate direction
+    effect_magnitude = 1 - 4 * stat / (n * (n + 1))
+    effect_size = effect_magnitude * np.sign(np.mean(values1 - values2))
+
+    # Apply Bonferroni correction
+    if correction == "bonferroni" and n_comparisons > 1:
+        adjusted_alpha = alpha / n_comparisons
+    else:
+        adjusted_alpha = alpha
 
     return {
         "statistic": stat,
         "p_value": pval,
-        "significant": pval < alpha,
+        "significant": pval < adjusted_alpha,
         "effect_size": effect_size,
         "n_samples": n,
         "mean_diff": float(np.mean(values1 - values2)),
+        "adjusted_alpha": adjusted_alpha,
+        "n_comparisons": n_comparisons,
     }
 
 
@@ -364,24 +370,34 @@ def summarize_results(
             continue
 
         mean = values.mean()
-        std = values.std(ddof=1)  # Use sample std for CI computation
+        std = values.std(ddof=1)
         n = len(values)
 
-        # Confidence interval (t-distribution for small samples)
+        # Bootstrap confidence interval (distribution-free, appropriate for
+        # bounded metrics like AUC where normality cannot be assumed)
         if n > 1:
-            t_val = stats.t.ppf((1 + confidence) / 2, n - 1)
-            ci_half = t_val * std / np.sqrt(n)
+            n_bootstrap = 10000
+            rng = np.random.RandomState(42)
+            boot_means = np.array([
+                rng.choice(values, size=n, replace=True).mean()
+                for _ in range(n_bootstrap)
+            ])
+            alpha = 1 - confidence
+            ci_lower = np.percentile(boot_means, 100 * alpha / 2)
+            ci_upper = np.percentile(boot_means, 100 * (1 - alpha / 2))
         else:
-            ci_half = np.nan
+            ci_lower = np.nan
+            ci_upper = np.nan
 
         summary_data.append(
             {
                 "metric": col,
                 "mean": mean,
                 "std": std,
-                "ci_lower": mean - ci_half,
-                "ci_upper": mean + ci_half,
+                "ci_lower": ci_lower,
+                "ci_upper": ci_upper,
                 "n": n,
+                "ci_method": "bootstrap_percentile",
             }
         )
 

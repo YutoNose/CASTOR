@@ -66,7 +66,7 @@ def draw(ax, df=None):
 
     for i, (idx, row) in enumerate(summary.iterrows()):
         ax.text(1.02, i, f'{row["mean"]:.2f}\n[{row["ci_low"]:.2f}-{row["ci_high"]:.2f}]',
-                va='center', fontsize=4)
+                va='center', fontsize=5)
 
 
 def create():

@@ -188,21 +188,17 @@ def run_synthetic_benchmark(config, scenarios=None, seeds=None, methods=None, ve
             result = {"scenario": scenario_name, "seed": seed}
 
             for method, score in scores_dict.items():
-                # Ectopic AUC
+                # Ectopic AUC: Ectopic vs ALL others (consistent with core/evaluation.py)
                 if ectopic_mask.sum() > 0:
-                    mask = ~intrinsic_mask
-                    if mask.sum() > 0 and ectopic_mask[mask].sum() > 0:
-                        result[f"auc_ectopic_{method}"] = roc_auc_score(
-                            ectopic_mask[mask].astype(int), score[mask]
-                        )
+                    result[f"auc_ectopic_{method}"] = roc_auc_score(
+                        ectopic_mask.astype(int), score
+                    )
 
-                # Intrinsic AUC
+                # Intrinsic AUC: Intrinsic vs ALL others
                 if intrinsic_mask.sum() > 0:
-                    mask = ~ectopic_mask
-                    if mask.sum() > 0 and intrinsic_mask[mask].sum() > 0:
-                        result[f"auc_intrinsic_{method}"] = roc_auc_score(
-                            intrinsic_mask[mask].astype(int), score[mask]
-                        )
+                    result[f"auc_intrinsic_{method}"] = roc_auc_score(
+                        intrinsic_mask.astype(int), score
+                    )
 
             all_results.append(result)
 
@@ -222,6 +218,8 @@ def run_noise_robustness(config, noise_levels=[0.0, 0.1, 0.2, 0.3, 0.5], seeds=N
             print(f"\nNoise level: {noise_level}")
 
         for seed in tqdm(seeds, desc=f"noise={noise_level}", disable=not verbose):
+            set_seed(seed)
+
             X, coords, labels, ectopic_idx, intrinsic_idx, metadata = generate_scenario_data(
                 scenario=scenario,
                 n_spots=config.n_spots,
@@ -241,15 +239,14 @@ def run_noise_robustness(config, noise_levels=[0.0, 0.1, 0.2, 0.3, 0.5], seeds=N
             scores_dict = compute_all_scores(X, coords, data, seed, config)
 
             ectopic_mask = (labels == 1)
-            intrinsic_mask = (labels == 2)
-            mask = ~intrinsic_mask
 
             result = {"noise_level": noise_level, "seed": seed}
 
             for method, score in scores_dict.items():
-                if ectopic_mask[mask].sum() > 0:
+                # Ectopic vs ALL others (consistent with core/evaluation.py)
+                if ectopic_mask.sum() > 0:
                     result[f"auc_{method}"] = roc_auc_score(
-                        ectopic_mask[mask].astype(int), score[mask]
+                        ectopic_mask.astype(int), score
                     )
 
             all_results.append(result)
@@ -314,7 +311,7 @@ def statistical_tests(results, baseline_method="inv_pos", alpha=0.05):
             # Wilcoxon signed-rank test (primary test - non-parametric)
             try:
                 w_stat, w_pval = stats.wilcoxon(baseline_scores, other_scores)
-            except:
+            except Exception:
                 w_stat, w_pval = np.nan, np.nan
 
             tests.append({
@@ -357,7 +354,7 @@ def plot_scenario_comparison(results, output_dir):
 
     # Create heatmap
     fig, ax = plt.subplots(figsize=(14, 6))
-    sns.heatmap(df, annot=True, fmt=".3f", cmap="RdYlGn", vmin=0.5, vmax=1.0,
+    sns.heatmap(df, annot=True, fmt=".3f", cmap="YlOrRd", vmin=0.5, vmax=1.0,
                 cbar_kws={"label": "Ectopic Detection AUC"}, ax=ax)
     ax.set_title("Ectopic Anomaly Detection Performance by Scenario", fontsize=14)
     ax.set_xlabel("Method", fontsize=12)

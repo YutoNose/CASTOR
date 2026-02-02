@@ -210,6 +210,7 @@ def train_model(
                 f"loss_neighbor={loss_neighbor.item():.4f}"
             )
 
+    model.eval()
     return model
 
 

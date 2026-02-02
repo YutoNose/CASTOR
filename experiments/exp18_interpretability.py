@@ -144,7 +144,7 @@ def run_interpretability_analysis(
 
         # Normalize coordinates to [0,1] for distance comparisons
         coords_min = coords.min(axis=0)
-        coords_range = coords.ptp(axis=0)
+        coords_range = coords.max(axis=0) - coords.min(axis=0)
         coords_range[coords_range == 0] = 1
         coords_norm = (coords - coords_min) / coords_range
 
@@ -315,7 +315,7 @@ def run(config: ExperimentConfig = None, verbose: bool = True) -> pd.DataFrame:
     if config is None:
         config = DEFAULT_CONFIG
 
-    her2st_dir = "/home/yutonose/Projects/her2st"
+    her2st_dir = config.her2st_dir
 
     if not os.path.exists(her2st_dir):
         print(f"  Warning: HER2ST data not found at {her2st_dir}")
@@ -339,7 +339,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--her2st-dir", type=str,
-                        default="/home/yutonose/Projects/her2st")
+                        default=DEFAULT_CONFIG.her2st_dir)
     parser.add_argument("--samples", nargs="+", default=None)
     parser.add_argument("--seeds", type=int, default=5)
     parser.add_argument("--n-transplant", type=int, default=30)

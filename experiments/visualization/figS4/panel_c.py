@@ -88,7 +88,7 @@ def draw(ax, df=None):
     for i, d in enumerate(effect_sizes):
         ax.text(d + 0.1, i, f'{d:.1f}', va='center', fontsize=5)
 
-    ax.legend(fontsize=4, loc='lower right')
+    ax.legend(fontsize=5, loc='lower right')
 
 
 def create():

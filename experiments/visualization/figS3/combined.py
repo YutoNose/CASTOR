@@ -73,22 +73,22 @@ def create_combined(df=None, save_dir=None):
     ax_a = fig.add_subplot(2, 2, 1)
     panel_a.draw(ax_a, df)
     ax_a.text(-0.12, 1.08, "a", transform=ax_a.transAxes,
-              fontsize=10, fontweight="bold")
+              fontsize=8, fontweight="bold")
 
     ax_b = fig.add_subplot(2, 2, 2)
     panel_b.draw(ax_b, df)
     ax_b.text(-0.12, 1.08, "b", transform=ax_b.transAxes,
-              fontsize=10, fontweight="bold")
+              fontsize=8, fontweight="bold")
 
     ax_c = fig.add_subplot(2, 2, 3)
     panel_c.draw(ax_c, df)
     ax_c.text(-0.12, 1.08, "c", transform=ax_c.transAxes,
-              fontsize=10, fontweight="bold")
+              fontsize=8, fontweight="bold")
 
     ax_d = fig.add_subplot(2, 2, 4)
     panel_d.draw(ax_d, df)
     ax_d.text(-0.12, 1.08, "d", transform=ax_d.transAxes,
-              fontsize=10, fontweight="bold")
+              fontsize=8, fontweight="bold")
 
     plt.tight_layout(h_pad=2.5, w_pad=2.0)
 
@@ -118,10 +118,10 @@ def main():
     print(f"  Mean: {np.mean(cs):.4f}")
     print(f"  Median: {np.median(cs):.4f}")
     print(f"  Fraction > 0: {(cs > 0).sum()}/{len(cs)} ({100*(cs>0).mean():.1f}%)")
-    t_stat, pval = stats.ttest_1samp(cs, 0)
-    print(f"  One-sample t-test vs 0: t={t_stat:.3f}, p={pval/2:.2e} (one-sided)")
-    w_stat, w_pval = stats.wilcoxon(cs)
-    print(f"  Wilcoxon signed-rank: W={w_stat:.0f}, p={w_pval/2:.2e} (one-sided)")
+    t_stat, pval = stats.ttest_1samp(cs, 0, alternative='greater')
+    print(f"  One-sample t-test vs 0: t={t_stat:.3f}, p={pval:.2e} (one-sided)")
+    w_stat, w_pval = stats.wilcoxon(cs, alternative='greater')
+    print(f"  Wilcoxon signed-rank: W={w_stat:.0f}, p={w_pval:.2e} (one-sided)")
 
     # Per-sample
     print(f"\n--- Per-Sample Cosine Similarity ---")

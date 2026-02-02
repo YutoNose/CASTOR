@@ -140,10 +140,12 @@ def prepare_from_anndata(
     # - Library-size normalized: max typically 1-100, floats
     # - Log-transformed: typically max < 15 for log1p(1e4 normalized)
     # - Z-scored: typically max < 10, can be negative
+    min_val = X_dense.min()
+    has_integers = np.allclose(X_dense[:100], np.round(X_dense[:100]))
 
-    is_likely_raw = max_val > 100
-    is_likely_log = max_val < 15 and X_dense.min() >= 0
-    is_likely_scaled = X_dense.min() < 0  # Z-scored data has negative values
+    is_likely_raw = max_val > 100 or (max_val > 20 and has_integers)
+    is_likely_log = max_val < 15 and min_val >= 0 and not has_integers
+    is_likely_scaled = min_val < -0.1  # Z-scored data has negative values
 
     if skip_normalization:
         log_transform = False
@@ -156,10 +158,20 @@ def prepare_from_anndata(
         # Already log-transformed, just scale
         log_transform = False
         scale = True
+    elif is_likely_raw:
+        # Raw counts, apply full pipeline
+        sc.pp.normalize_total(adata, target_sum=1e4)
+        log_transform = True
+        scale = True
     else:
-        # Raw or library-size normalized, apply full pipeline
-        if is_likely_raw:
-            sc.pp.normalize_total(adata, target_sum=1e4)
+        # Ambiguous state (e.g., library-size normalized, max 15-100)
+        import warnings
+        warnings.warn(
+            f"Ambiguous data state (max={max_val:.1f}, min={min_val:.1f}). "
+            "Assuming library-size normalized data; applying log1p + scaling. "
+            "Set skip_normalization=True if data is already preprocessed.",
+            UserWarning,
+        )
         log_transform = True
         scale = True
 

@@ -96,6 +96,7 @@ def run_single_seed(seed: int, config: ExperimentConfig, verbose: bool = False):
     results = {"seed": seed}
 
     # 1. Correlation analysis (all spots)
+    # Pearson (linear) and Spearman (monotonic, robust to skewed distributions)
     corr_pos_pca, pval_pos_pca = stats.pearsonr(s_pos, s_pca)
     corr_pos_neighbor, _ = stats.pearsonr(s_pos, s_neighbor)
     corr_pca_neighbor, _ = stats.pearsonr(s_pca, s_neighbor)
@@ -105,16 +106,30 @@ def run_single_seed(seed: int, config: ExperimentConfig, verbose: bool = False):
     results["corr_pos_neighbor_all"] = corr_pos_neighbor
     results["corr_pca_neighbor_all"] = corr_pca_neighbor
 
+    # Spearman rank correlation (more appropriate for right-skewed anomaly scores)
+    sp_pos_pca, sp_pos_pca_pval = stats.spearmanr(s_pos, s_pca)
+    sp_pos_neighbor, _ = stats.spearmanr(s_pos, s_neighbor)
+    sp_pca_neighbor, _ = stats.spearmanr(s_pca, s_neighbor)
+
+    results["spearman_pos_pca_all"] = sp_pos_pca
+    results["spearman_pos_pca_pval"] = sp_pos_pca_pval
+    results["spearman_pos_neighbor_all"] = sp_pos_neighbor
+    results["spearman_pca_neighbor_all"] = sp_pca_neighbor
+
     # 2. Correlation on normal spots only
     if normal_mask.sum() > 10:
         corr_normal, _ = stats.pearsonr(s_pos[normal_mask], s_pca[normal_mask])
         results["corr_pos_pca_normal"] = corr_normal
+        sp_normal, _ = stats.spearmanr(s_pos[normal_mask], s_pca[normal_mask])
+        results["spearman_pos_pca_normal"] = sp_normal
 
     # 3. Correlation on anomalies only
     anomaly_mask = ectopic_mask | intrinsic_mask
     if anomaly_mask.sum() > 10:
         corr_anomaly, _ = stats.pearsonr(s_pos[anomaly_mask], s_pca[anomaly_mask])
         results["corr_pos_pca_anomaly"] = corr_anomaly
+        sp_anomaly, _ = stats.spearmanr(s_pos[anomaly_mask], s_pca[anomaly_mask])
+        results["spearman_pos_pca_anomaly"] = sp_anomaly
 
     # 4. Separation AUC: Can we distinguish Ectopic from Intrinsic?
     sep_auc = compute_separation_auc(s_pos, s_pca, labels)
@@ -180,10 +195,15 @@ def run(config: ExperimentConfig = None, verbose: bool = True) -> pd.DataFrame:
         print("\n" + "=" * 60)
         print("Independence Analysis Summary")
         print("=" * 60)
-        print(f"\nKey Correlations:")
+        print(f"\nPearson Correlations:")
         print(f"  Inv_PosError vs PCA_Error (all):     {results['corr_pos_pca_all'].mean():.3f} ± {results['corr_pos_pca_all'].std():.3f}")
         print(f"  Inv_PosError vs PCA_Error (normal):  {results['corr_pos_pca_normal'].mean():.3f} ± {results['corr_pos_pca_normal'].std():.3f}")
         print(f"  Inv_PosError vs Neighbor_Diff:       {results['corr_pos_neighbor_all'].mean():.3f} ± {results['corr_pos_neighbor_all'].std():.3f}")
+
+        print(f"\nSpearman Rank Correlations:")
+        print(f"  Inv_PosError vs PCA_Error (all):     {results['spearman_pos_pca_all'].mean():.3f} ± {results['spearman_pos_pca_all'].std():.3f}")
+        print(f"  Inv_PosError vs PCA_Error (normal):  {results['spearman_pos_pca_normal'].mean():.3f} ± {results['spearman_pos_pca_normal'].std():.3f}")
+        print(f"  Inv_PosError vs Neighbor_Diff:       {results['spearman_pos_neighbor_all'].mean():.3f} ± {results['spearman_pos_neighbor_all'].std():.3f}")
 
         print(f"\nSeparation Power:")
         print(f"  Ectopic vs Intrinsic AUC: {results['separation_auc'].mean():.3f} ± {results['separation_auc'].std():.3f}")

@@ -114,7 +114,7 @@ def save_figure(fig, name, formats=['pdf', 'png']):
 def add_panel_label(ax, label, x=-0.15, y=1.05):
     """Add panel label (a, b, c, etc.) to axes."""
     ax.text(x, y, label, transform=ax.transAxes,
-            fontsize=10, fontweight='bold', va='top', ha='left')
+            fontsize=8, fontweight='bold', va='top', ha='left')
 
 def load_results(filename):
     """Load results from CSV file."""

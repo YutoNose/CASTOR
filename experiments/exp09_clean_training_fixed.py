@@ -234,12 +234,22 @@ def run_single_seed(seed: int, config: ExperimentConfig, verbose: bool = False):
         )
     )
 
-    # 2. Prepare training data
+    # 2. Normalize using training statistics only (prevent test data leakage)
+    X_train_log = np.log1p(X_train.astype(np.float64))
+    train_mean = X_train_log.mean(axis=0)
+    train_std = np.maximum(X_train_log.std(axis=0), 1e-8)
+
+    X_train_norm = (X_train_log - train_mean) / train_std
+    X_test_norm = (np.log1p(X_test.astype(np.float64)) - train_mean) / train_std
+
+    # Prepare data with pre-normalized expressions
     data_train = prepare_data(
-        X_train,
+        X_train_norm,
         coords_train,
         k=min(config.k_neighbors, len(X_train) - 1),
         device=config.device,
+        log_transform=False,
+        scale=False,
     )
 
     # 3. Train model on CLEAN data
@@ -261,12 +271,14 @@ def run_single_seed(seed: int, config: ExperimentConfig, verbose: bool = False):
         verbose=verbose,
     )
 
-    # 4. Prepare test data
+    # 4. Prepare test data (normalized with training statistics)
     data_test = prepare_data(
-        X_test,
+        X_test_norm,
         coords_test,
         k=min(config.k_neighbors, len(X_test) - 1),
         device=config.device,
+        log_transform=False,
+        scale=False,
     )
 
     # 5. Compute scores on test data using CLEAN-trained model
@@ -360,7 +372,7 @@ def run_single_seed(seed: int, config: ExperimentConfig, verbose: bool = False):
 
         # Denormalize using coords_train (the model's training space)
         coords_min = coords_train.min(axis=0)
-        coords_range = np.ptp(coords_train, axis=0)
+        coords_range = coords_train.max(axis=0) - coords_train.min(axis=0)
         pos_pred_denorm = scores["pos_pred"] * coords_range + coords_min
 
         pred_ect = pos_pred_denorm[ectopic_local_idx]

@@ -59,7 +59,8 @@ def normalize_coordinates(coords: np.ndarray) -> np.ndarray:
         Normalized coordinates.
     """
     c_min = coords.min(axis=0)
-    c_range = np.ptp(coords, axis=0)
+    c_max = coords.max(axis=0)
+    c_range = c_max - c_min  # np.ptp is deprecated in NumPy 2.0
     c_range = np.maximum(c_range, 1e-8)
     return (coords - c_min) / c_range
 

@@ -42,8 +42,8 @@ SCENARIO_ORDER = [
 SCENARIO_LABELS = {
     'baseline': 'Baseline',
     'noisy_ectopic': 'Noisy\nCopy',
-    'partial_ectopic': 'Partial Mix\n(\u03b1=0.7)',
-    'hard_ectopic': 'Partial Mix\n(\u03b1=0.5)',
+    'partial_ectopic': 'Partial Mix\n($\\alpha$=0.7)',
+    'hard_ectopic': 'Partial Mix\n($\\alpha$=0.5)',
     'hardest': 'Partial Mix\n+ Noise + Subtle',
     'realistic_counts': 'Realistic\nCounts',
     'medium_intrinsic': 'Medium\nIntrinsic',
@@ -123,7 +123,7 @@ def _draw_scenario_panel(ax):
                                        linewidth=0.4))
 
     section_xs = [0.15, 1.15, 2.15]
-    labels = ['Baseline', 'Partial Mix\n(\u03b1=0.5)', 'Hardest']
+    labels = ['Baseline', 'Partial Mix\n($\\alpha$=0.5)', 'Hardest']
     sublabels = ['100% donor', '50% donor +\n50% original', 'mixed +\nnoise + subtle']
     bar_colors = [COLORS['ectopic'], '#b07cd8', '#d45f5f']
 
@@ -156,7 +156,7 @@ def _draw_scenario_panel(ax):
         # Labels
         ax.text(arrow_cx, 1.05, lbl, fontsize=6, fontweight='bold',
                 ha='center', va='bottom')
-        ax.text(arrow_cx, 0.92, slbl, fontsize=4.5, ha='center',
+        ax.text(arrow_cx, 0.92, slbl, fontsize=5, ha='center',
                 va='top', color='#444444')
 
     # Difficulty arrow across the bottom

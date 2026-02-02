@@ -272,6 +272,7 @@ def compute_spotsweeper(
 def compute_pca_error(
     X: np.ndarray,
     n_components: int = 50,
+    X_train: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """
     PCA reconstruction error.
@@ -282,9 +283,12 @@ def compute_pca_error(
     Parameters
     ----------
     X : np.ndarray
-        Expression matrix [n_spots, n_genes]
+        Expression matrix [n_spots, n_genes] to score.
     n_components : int
-        Number of PCA components
+        Number of PCA components.
+    X_train : np.ndarray, optional
+        If provided, fit PCA on X_train and compute reconstruction error
+        on X (inductive mode). If None, fit and score on X (transductive).
 
     Returns
     -------
@@ -294,9 +298,14 @@ def compute_pca_error(
     if sparse.issparse(X):
         X = X.toarray()
 
-    n_comp = min(n_components, X.shape[1] - 1, X.shape[0] - 1)
+    fit_data = X_train if X_train is not None else X
+    if sparse.issparse(fit_data):
+        fit_data = fit_data.toarray()
+
+    n_comp = min(n_components, fit_data.shape[1] - 1, fit_data.shape[0] - 1)
     pca = PCA(n_components=n_comp)
-    X_transformed = pca.fit_transform(X)
+    pca.fit(fit_data)
+    X_transformed = pca.transform(X)
     X_reconstructed = pca.inverse_transform(X_transformed)
 
     return np.linalg.norm(X - X_reconstructed, axis=1)
@@ -305,6 +314,7 @@ def compute_pca_error(
 def compute_lof(
     X: np.ndarray,
     n_neighbors: int = 20,
+    X_train: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """
     Local Outlier Factor in expression space.
@@ -314,9 +324,12 @@ def compute_lof(
     Parameters
     ----------
     X : np.ndarray
-        Expression matrix [n_spots, n_genes]
+        Expression matrix [n_spots, n_genes] to score.
     n_neighbors : int
-        Number of neighbors for LOF
+        Number of neighbors for LOF.
+    X_train : np.ndarray, optional
+        If provided, fit LOF on X_train in novelty detection mode and
+        score X. If None, use transductive mode (fit and score on X).
 
     Returns
     -------
@@ -326,9 +339,16 @@ def compute_lof(
     if sparse.issparse(X):
         X = X.toarray()
 
-    lof = LocalOutlierFactor(n_neighbors=n_neighbors, novelty=False)
-    lof.fit(X)
-    return -lof.negative_outlier_factor_
+    if X_train is not None:
+        if sparse.issparse(X_train):
+            X_train = X_train.toarray()
+        lof = LocalOutlierFactor(n_neighbors=n_neighbors, novelty=True)
+        lof.fit(X_train)
+        return -lof.decision_function(X)
+    else:
+        lof = LocalOutlierFactor(n_neighbors=n_neighbors, novelty=False)
+        lof.fit(X)
+        return -lof.negative_outlier_factor_
 
 
 def compute_isolation_forest(
@@ -336,6 +356,7 @@ def compute_isolation_forest(
     n_estimators: int = 100,
     contamination: float = 0.1,
     random_state: int = 42,
+    X_train: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """
     Isolation Forest score.
@@ -345,13 +366,16 @@ def compute_isolation_forest(
     Parameters
     ----------
     X : np.ndarray
-        Expression matrix [n_spots, n_genes]
+        Expression matrix [n_spots, n_genes] to score.
     n_estimators : int
-        Number of trees
+        Number of trees.
     contamination : float
-        Expected proportion of anomalies
+        Expected proportion of anomalies.
     random_state : int
-        Random state
+        Random state.
+    X_train : np.ndarray, optional
+        If provided, fit on X_train and score X (inductive mode).
+        If None, fit and score on X (transductive).
 
     Returns
     -------
@@ -361,12 +385,16 @@ def compute_isolation_forest(
     if sparse.issparse(X):
         X = X.toarray()
 
+    fit_data = X_train if X_train is not None else X
+    if sparse.issparse(fit_data):
+        fit_data = fit_data.toarray()
+
     iso = IsolationForest(
         n_estimators=n_estimators,
         contamination=contamination,
         random_state=random_state,
     )
-    iso.fit(X)
+    iso.fit(fit_data)
     return -iso.decision_function(X)
 
 
@@ -468,6 +496,7 @@ def compute_all_baselines(
     coords: np.ndarray,
     k: int = 15,
     random_state: int = 42,
+    X_train: Optional[np.ndarray] = None,
 ) -> dict:
     """
     Compute all baseline scores at once.
@@ -475,13 +504,16 @@ def compute_all_baselines(
     Parameters
     ----------
     X : np.ndarray
-        Expression matrix [n_spots, n_genes]
+        Expression matrix [n_spots, n_genes] to score.
     coords : np.ndarray
         Spatial coordinates [n_spots, 2]
     k : int
         Number of neighbors for spatial methods
     random_state : int
         Random state for reproducibility
+    X_train : np.ndarray, optional
+        If provided, global methods (PCA, LOF, IF) are fit on X_train
+        and score X (inductive mode for train/test experiments).
 
     Returns
     -------
@@ -489,15 +521,15 @@ def compute_all_baselines(
         Dictionary with all baseline scores
     """
     return {
-        # Spatial methods
+        # Spatial methods (always transductive - computed on X)
         "neighbor_diff": compute_neighbor_diff(X, coords, k),
         "lisa": compute_lisa(X, coords, k),  # True Local Moran's I
         "local_spatial_deviation": compute_local_spatial_deviation(X, coords, k),
         "spotsweeper": compute_spotsweeper(X, coords, k),
-        # Global methods
-        "pca_error": compute_pca_error(X),
-        "lof": compute_lof(X),
-        "isolation_forest": compute_isolation_forest(X, random_state=random_state),
+        # Global methods (inductive if X_train provided)
+        "pca_error": compute_pca_error(X, X_train=X_train),
+        "lof": compute_lof(X, X_train=X_train),
+        "isolation_forest": compute_isolation_forest(X, random_state=random_state, X_train=X_train),
         "mahalanobis": compute_mahalanobis(X),
         "ocsvm": compute_ocsvm(X),
     }

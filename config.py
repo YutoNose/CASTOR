@@ -7,6 +7,7 @@ consistency across experiments.
 
 from dataclasses import dataclass, field
 from typing import List
+import os
 import torch
 
 
@@ -58,6 +59,14 @@ class ExperimentConfig:
 
     # Device - uses robust check to verify CUDA actually works
     device: str = field(default_factory=_get_default_device)
+
+    # Data paths (override via HER2ST_DIR environment variable)
+    her2st_dir: str = field(
+        default_factory=lambda: os.environ.get(
+            "HER2ST_DIR",
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "her2st"),
+        )
+    )
 
     # Output
     results_dir: str = "results"

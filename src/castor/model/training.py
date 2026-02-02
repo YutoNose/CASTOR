@@ -80,6 +80,7 @@ def train_model(
                 loss_neighbor.item(),
             )
 
+    model.eval()
     return model
 
 

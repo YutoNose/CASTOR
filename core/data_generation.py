@@ -11,6 +11,7 @@ realistic single-cell/spatial transcriptomics count data.
 import warnings
 import numpy as np
 from typing import Tuple, Optional
+from sklearn.neighbors import KDTree
 
 
 def generate_synthetic_data(
@@ -502,3 +503,144 @@ def generate_raw_counts(
     X_norm = np.log1p(X_counts)
 
     return X_counts, X_norm, coords, labels, ectopic_idx, intrinsic_idx
+
+
+def inject_clustered_ectopic(
+    X: np.ndarray,
+    coords: np.ndarray,
+    cluster_size: int = 1,
+    n_total_ectopic: int = 100,
+    min_distance_factor: float = 0.5,
+    random_state: int = 42,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, int]:
+    """
+    Inject ectopic anomalies as spatially contiguous clusters.
+
+    For each cluster:
+    1. Select a recipient center and a distant donor center
+    2. Pick `cluster_size` contiguous spots around the recipient center
+    3. For each recipient spot, find the corresponding donor spot via
+       spatial offset mapping and copy its expression
+
+    When cluster_size=1, this reduces to standard scattered injection.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Expression matrix [n_spots, n_genes] (raw counts)
+    coords : np.ndarray
+        Spatial coordinates [n_spots, 2]
+    cluster_size : int
+        Number of contiguous spots per ectopic cluster
+    n_total_ectopic : int
+        Total number of ectopic spots to inject
+    min_distance_factor : float
+        Minimum distance between donor and recipient centers
+        (in normalized [0,1] coordinates)
+    random_state : int
+        Random seed
+
+    Returns
+    -------
+    X_injected : np.ndarray
+        Modified expression matrix with ectopic anomalies
+    labels : np.ndarray
+        0=normal, 1=ectopic
+    ectopic_idx : np.ndarray
+        Indices of injected ectopic spots
+    n_ectopic_actual : int
+        Actual number of ectopic spots injected
+    """
+    rng = np.random.RandomState(random_state)
+    n_spots = X.shape[0]
+
+    # Normalize coordinates to [0, 1]
+    coords_norm = (coords - coords.min(axis=0)) / (
+        coords.max(axis=0) - coords.min(axis=0) + 1e-8
+    )
+
+    # Snapshot of original expression to avoid cascading contamination
+    X_injected = X.copy()
+    X_original = X.copy()
+    labels = np.zeros(n_spots, dtype=int)
+
+    # Compute number of clusters
+    n_clusters = max(1, n_total_ectopic // cluster_size)
+    target_per_cluster = cluster_size
+
+    # Build KDTree for spatial neighbor queries
+    tree = KDTree(coords_norm)
+
+    used_spots = set()
+    all_ectopic = []
+
+    for c in range(n_clusters):
+        # --- Pick recipient center (not already used) ---
+        available = np.array([i for i in range(n_spots) if i not in used_spots])
+        if len(available) == 0:
+            break
+        recipient_center = rng.choice(available)
+
+        # --- Pick donor center far from recipient ---
+        dists_to_recipient = np.linalg.norm(
+            coords_norm - coords_norm[recipient_center], axis=1
+        )
+        distant_mask = dists_to_recipient > min_distance_factor
+        # Exclude already-used spots from donor candidates
+        distant_candidates = np.where(distant_mask)[0]
+        distant_candidates = np.array(
+            [i for i in distant_candidates if i not in used_spots]
+        )
+        if len(distant_candidates) == 0:
+            continue
+        donor_center = rng.choice(distant_candidates)
+
+        # --- Select cluster_size contiguous spots near recipient center ---
+        # Query enough neighbors, then filter out used ones
+        k_query = min(target_per_cluster * 3, n_spots)
+        _, neighbor_idx = tree.query(
+            coords_norm[recipient_center].reshape(1, -1), k=k_query
+        )
+        neighbor_idx = neighbor_idx[0]
+
+        # Filter out already-used spots
+        recipient_spots = []
+        for idx in neighbor_idx:
+            if idx not in used_spots:
+                recipient_spots.append(idx)
+            if len(recipient_spots) >= target_per_cluster:
+                break
+
+        if len(recipient_spots) == 0:
+            continue
+
+        recipient_spots = np.array(recipient_spots)
+
+        # --- For each recipient, find corresponding donor via offset mapping ---
+        for r_idx in recipient_spots:
+            offset = coords_norm[r_idx] - coords_norm[recipient_center]
+            donor_target = coords_norm[donor_center] + offset
+
+            # Find nearest spot to the target donor position
+            _, d_idx = tree.query(donor_target.reshape(1, -1), k=1)
+            d_idx = d_idx[0, 0]
+
+            # Copy original expression from donor to recipient
+            X_injected[r_idx] = X_original[d_idx].copy()
+            labels[r_idx] = 1
+            all_ectopic.append(r_idx)
+
+        # Mark recipient spots as used (don't mark donor spots — they keep
+        # their original expression and can serve as donors for other clusters)
+        used_spots.update(recipient_spots.tolist())
+
+    ectopic_idx = np.array(all_ectopic, dtype=int)
+    n_ectopic_actual = len(ectopic_idx)
+
+    if n_ectopic_actual < n_total_ectopic:
+        warnings.warn(
+            f"Only {n_ectopic_actual}/{n_total_ectopic} ectopic anomalies "
+            f"could be injected (cluster_size={cluster_size})"
+        )
+
+    return X_injected, labels, ectopic_idx, n_ectopic_actual

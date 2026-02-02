@@ -54,8 +54,7 @@ def draw(ax, df=None):
     ax.axvline(0, color="gray", lw=1.5, ls="--", alpha=0.7,
                label="Random (0)")
 
-    t_stat, pval_two = stats.ttest_1samp(cs, 0)
-    pval = pval_two / 2 if t_stat > 0 else 1 - pval_two / 2
+    t_stat, pval = stats.ttest_1samp(cs, 0, alternative='greater')
 
     # Use scipy's built-in one-sided test (tests if distribution > 0)
     w_stat, w_pval = stats.wilcoxon(cs, alternative='greater')

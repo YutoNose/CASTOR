@@ -45,7 +45,7 @@ def draw(ax, df=None):
 
     # Note: Selectivity column can be negative, so we don't constrain vmin/vmax
     # AUC columns are [0,1], Selectivity is [-1,1]
-    sns.heatmap(summary, annot=True, fmt='.2f', cmap='RdYlGn',
+    sns.heatmap(summary, annot=True, fmt='.2f', cmap='PuOr',
                 center=0.5, ax=ax, cbar_kws={'shrink': 0.6},
                 annot_kws={'size': 6})
 

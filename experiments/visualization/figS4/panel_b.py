@@ -55,17 +55,16 @@ def draw(ax, df=None):
             if len(common) > 2:
                 _, p = stats.ttest_rel(vals_i.loc[common], vals_j.loc[common])
             else:
-                _, p = stats.ttest_ind(vals_i, vals_j)
+                p = np.nan  # Insufficient paired observations
             pval_matrix[i, j] = p
             pval_matrix[j, i] = p
 
     n_tests = n * (n - 1) / 2
     pval_corrected = np.minimum(pval_matrix * n_tests, 1.0)
 
-    # Use uncorrected p-values if no comparison survives Bonferroni
-    use_corrected = np.any((pval_corrected < 0.05) & ~np.eye(n, dtype=bool))
-    pvals = pval_corrected if use_corrected else pval_matrix
-    correction_label = "Bonferroni" if use_corrected else "uncorrected"
+    # Always use Bonferroni correction (no fallback to avoid HARKing)
+    pvals = pval_corrected
+    correction_label = "Bonferroni"
 
     sig_matrix = np.where(pvals < 0.001, 3,
                           np.where(pvals < 0.01, 2,
@@ -93,7 +92,7 @@ def draw(ax, df=None):
         Patch(facecolor='#FFCC80', label='p<0.01'),
         Patch(facecolor='#EF5350', label='p<0.001'),
     ]
-    ax.legend(handles=legend_elements, loc='upper right', fontsize=4,
+    ax.legend(handles=legend_elements, loc='upper right', fontsize=5,
               bbox_to_anchor=(1.35, 1))
 
 

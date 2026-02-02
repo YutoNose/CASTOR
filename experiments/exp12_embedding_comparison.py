@@ -186,27 +186,17 @@ def run_single_experiment(
     normal_mask = (labels == 0)
 
     for method, score in scores_dict.items():
-        # Ectopic detection: Normal vs Ectopic
-        if ectopic_mask.sum() > 0 and normal_mask.sum() > 0:
-            ect_labels = np.zeros(len(labels))
-            ect_labels[ectopic_mask] = 1
-            # Exclude intrinsic for fair comparison
-            mask = ~intrinsic_mask
-            if mask.sum() > 0 and ect_labels[mask].sum() > 0:
-                results[f"auc_ectopic_{method}"] = roc_auc_score(
-                    ect_labels[mask], score[mask]
-                )
+        # Ectopic AUC: Ectopic vs ALL others (consistent with core/evaluation.py)
+        if ectopic_mask.sum() > 0:
+            results[f"auc_ectopic_{method}"] = roc_auc_score(
+                ectopic_mask.astype(int), score
+            )
 
-        # Intrinsic detection: Normal vs Intrinsic
-        if intrinsic_mask.sum() > 0 and normal_mask.sum() > 0:
-            int_labels = np.zeros(len(labels))
-            int_labels[intrinsic_mask] = 1
-            # Exclude ectopic for fair comparison
-            mask = ~ectopic_mask
-            if mask.sum() > 0 and int_labels[mask].sum() > 0:
-                results[f"auc_intrinsic_{method}"] = roc_auc_score(
-                    int_labels[mask], score[mask]
-                )
+        # Intrinsic AUC: Intrinsic vs ALL others
+        if intrinsic_mask.sum() > 0:
+            results[f"auc_intrinsic_{method}"] = roc_auc_score(
+                intrinsic_mask.astype(int), score
+            )
 
     return results
 
