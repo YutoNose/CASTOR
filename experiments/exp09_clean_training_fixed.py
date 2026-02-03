@@ -194,9 +194,10 @@ def generate_zinb_clean_and_test(
     p_test = r / (r + mu_test_subset + 1e-12)
     X_test_counts = rng.negative_binomial(n=r, p=p_test)
 
-    # Expression-dependent dropout (shared gene-level rates from original mu)
-    gene_means = mu_matrix.mean(axis=0)
-    gene_dropout_rates = dropout_rate * np.exp(-gene_means / gene_means.mean())
+    # Expression-dependent dropout (gene-level rates from TRAINING mu only
+    # to avoid test data information leaking into dropout rate calculation)
+    gene_means = mu_train.mean(axis=0)
+    gene_dropout_rates = dropout_rate * np.exp(-gene_means / (gene_means.mean() + 1e-10))
     gene_dropout_rates = np.clip(gene_dropout_rates, 0.1, 0.8)
 
     dropout_train = rng.random(X_train_counts.shape) < gene_dropout_rates
@@ -271,7 +272,9 @@ def run_single_seed(seed: int, config: ExperimentConfig, verbose: bool = False):
         verbose=verbose,
     )
 
-    # 4. Prepare test data (normalized with training statistics)
+    # 4. Prepare test data (normalized with training statistics).
+    #    Use training coordinate stats for consistent normalization so that
+    #    position predictions are in the same coordinate space as training.
     data_test = prepare_data(
         X_test_norm,
         coords_test,
@@ -279,6 +282,8 @@ def run_single_seed(seed: int, config: ExperimentConfig, verbose: bool = False):
         device=config.device,
         log_transform=False,
         scale=False,
+        coords_ref_min=data_train["coords_min"],
+        coords_ref_range=data_train["coords_range"],
     )
 
     # 5. Compute scores on test data using CLEAN-trained model
@@ -334,7 +339,14 @@ def run_single_seed(seed: int, config: ExperimentConfig, verbose: bool = False):
         )
         result["auc_any_combined"] = roc_auc_score(any_anomaly.astype(int), combined)
 
-    # 7. Also test with contaminated training for comparison
+    # 7. Transductive comparison: train on test set (which contains anomalies)
+    # WARNING: This is NOT a fair clean-vs-contaminated comparison because the
+    # "contaminated" model is trained on the test set itself (data leakage).
+    # The purpose is solely to show that inverse prediction is robust even under
+    # transductive training with anomalies present. Do NOT interpret this as
+    # evidence that "clean training outperforms contaminated training" — the
+    # experimental conditions are not comparable. A fair comparison would require
+    # a separate contaminated training set with the same spatial structure.
     model_contam = InversePredictionModel(
         in_dim=data_test["n_genes"],
         hid_dim=config.hidden_dim,
@@ -370,10 +382,8 @@ def run_single_seed(seed: int, config: ExperimentConfig, verbose: bool = False):
     if ectopic_mask.sum() > 0:
         ectopic_local_idx = np.where(ectopic_mask)[0]
 
-        # Denormalize using coords_train (the model's training space)
-        coords_min = coords_train.min(axis=0)
-        coords_range = coords_train.max(axis=0) - coords_train.min(axis=0)
-        pos_pred_denorm = scores["pos_pred"] * coords_range + coords_min
+        # Denormalize using training coordinate stats (consistent with normalization)
+        pos_pred_denorm = scores["pos_pred"] * data_train["coords_range"] + data_train["coords_min"]
 
         pred_ect = pos_pred_denorm[ectopic_local_idx]
         true_ect = coords_test[ectopic_local_idx]

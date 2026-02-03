@@ -62,8 +62,9 @@ def draw(ax, df=None):
             bin_centers.append((bins[i] + bins[i + 1]) / 2)
             vals = y[mask]
             bin_medians.append(np.median(vals))
-            boot = np.array([np.median(np.random.choice(vals, len(vals)))
-                             for _ in range(200)])
+            rng = np.random.RandomState(42)
+            boot = np.array([np.median(rng.choice(vals, len(vals)))
+                             for _ in range(1000)])
             bin_cis.append((np.percentile(boot, 2.5), np.percentile(boot, 97.5)))
 
     if bin_centers:

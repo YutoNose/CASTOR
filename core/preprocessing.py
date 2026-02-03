@@ -23,6 +23,10 @@ def prepare_data(
     device: str = "cuda",
     log_transform: bool = True,
     scale: bool = True,
+    coords_ref_min: Optional[np.ndarray] = None,
+    coords_ref_range: Optional[np.ndarray] = None,
+    expr_ref_mean: Optional[np.ndarray] = None,
+    expr_ref_std: Optional[np.ndarray] = None,
 ) -> Dict[str, Any]:
     """
     Unified data preparation pipeline.
@@ -43,6 +47,18 @@ def prepare_data(
         Apply log1p transformation
     scale : bool
         Standardize expression to zero mean and unit variance
+    coords_ref_min : np.ndarray, optional
+        Reference minimum for coordinate normalization (from training data).
+        When provided together with coords_ref_range, ensures consistent
+        normalization between train and test sets.
+    coords_ref_range : np.ndarray, optional
+        Reference range for coordinate normalization (from training data).
+    expr_ref_mean : np.ndarray, optional
+        Reference mean for expression normalization (from training data).
+        When provided together with expr_ref_std, ensures consistent
+        normalization between train and test sets.
+    expr_ref_std : np.ndarray, optional
+        Reference std for expression normalization (from training data).
 
     Returns
     -------
@@ -55,29 +71,46 @@ def prepare_data(
         - edge_index: Spatial graph edges on device
         - n_spots: Number of spots
         - n_genes: Number of genes
+        - coords_min: Minimum used for coordinate normalization
+        - coords_range: Range used for coordinate normalization
+        - expr_mean: Mean used for expression normalization
+        - expr_std: Std used for expression normalization
 
     Example
     -------
-    >>> data = prepare_data(X, coords, k=15, device="cuda")
-    >>> model = InversePredictionModel(data["n_genes"])
-    >>> model = train_model(model, data["x_tensor"], data["coords_tensor"],
-    ...                     data["edge_index"])
+    >>> data_train = prepare_data(X_train, coords_train, k=15, device="cuda")
+    >>> data_test = prepare_data(X_test, coords_test, k=15, device="cuda",
+    ...     coords_ref_min=data_train["coords_min"],
+    ...     coords_ref_range=data_train["coords_range"],
+    ...     expr_ref_mean=data_train["expr_mean"],
+    ...     expr_ref_std=data_train["expr_std"])
     """
     # Ensure numpy arrays
     X = np.asarray(X)
     coords = np.asarray(coords)
 
     # Normalize expression
-    X_norm = normalize_expression(X, log_transform=log_transform, scale=scale)
+    X_norm, e_mean, e_std = normalize_expression(
+        X, log_transform=log_transform, scale=scale,
+        ref_mean=expr_ref_mean, ref_std=expr_ref_std,
+    )
 
     # Normalize coordinates to [0, 1]
-    coords_norm = normalize_coordinates(coords)
+    coords_norm, c_min, c_range = normalize_coordinates(
+        coords, ref_min=coords_ref_min, ref_range=coords_ref_range,
+    )
 
     # Build spatial graph
     edge_index = build_spatial_graph(coords, k=k)
 
     # Determine device
     if device == "cuda" and not torch.cuda.is_available():
+        import warnings
+        warnings.warn(
+            "CUDA requested but not available, falling back to CPU. "
+            "Results will be identical but training may be slower.",
+            UserWarning,
+        )
         device = "cpu"
 
     # Convert to tensors
@@ -93,6 +126,10 @@ def prepare_data(
         "edge_index": edge_index,
         "n_spots": X.shape[0],
         "n_genes": X.shape[1],
+        "coords_min": c_min,
+        "coords_range": c_range,
+        "expr_mean": e_mean,
+        "expr_std": e_std,
     }
 
 

@@ -11,7 +11,7 @@ Key metric: cosine similarity between
 
 Panels:
 (a) Spatial map: arrows showing predicted displacement vs donor direction
-(b) Cosine similarity distribution with one-sample t-test vs 0
+(b) Cosine similarity distribution with Wilcoxon signed-rank test vs 0
 (c) Per-sample mean cosine similarity
 (d) Cosine similarity vs transplant distance (donor-actual distance)
 """
@@ -118,8 +118,6 @@ def main():
     print(f"  Mean: {np.mean(cs):.4f}")
     print(f"  Median: {np.median(cs):.4f}")
     print(f"  Fraction > 0: {(cs > 0).sum()}/{len(cs)} ({100*(cs>0).mean():.1f}%)")
-    t_stat, pval = stats.ttest_1samp(cs, 0, alternative='greater')
-    print(f"  One-sample t-test vs 0: t={t_stat:.3f}, p={pval:.2e} (one-sided)")
     w_stat, w_pval = stats.wilcoxon(cs, alternative='greater')
     print(f"  Wilcoxon signed-rank: W={w_stat:.0f}, p={w_pval:.2e} (one-sided)")
 

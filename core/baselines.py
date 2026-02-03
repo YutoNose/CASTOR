@@ -9,6 +9,13 @@ All functions follow a consistent interface:
     score = compute_xxx(X, coords, ...)  -> np.ndarray [n_spots]
 
 Higher score = more anomalous.
+
+Note on hyperparameters: All baseline methods use default parameters
+(e.g., k=15, n_components=50, n_neighbors=20) without task-specific
+tuning. CASTOR's parameters (lambda_pos=0.5, hidden_dim=64, etc.)
+were selected via ablation study (exp07), not validation set tuning.
+For fair comparison, both CASTOR and baselines use fixed parameters
+without access to test labels.
 """
 
 import numpy as np
@@ -354,7 +361,7 @@ def compute_lof(
 def compute_isolation_forest(
     X: np.ndarray,
     n_estimators: int = 100,
-    contamination: float = 0.1,
+    contamination: str = "auto",
     random_state: int = 42,
     X_train: Optional[np.ndarray] = None,
 ) -> np.ndarray:
@@ -369,8 +376,10 @@ def compute_isolation_forest(
         Expression matrix [n_spots, n_genes] to score.
     n_estimators : int
         Number of trees.
-    contamination : float
-        Expected proportion of anomalies.
+    contamination : str or float
+        Expected proportion of anomalies. Default 'auto' lets IF estimate
+        the threshold using the original paper's offset, avoiding the need
+        to assume a specific contamination rate.
     random_state : int
         Random state.
     X_train : np.ndarray, optional
@@ -519,6 +528,17 @@ def compute_all_baselines(
     -------
     scores : dict
         Dictionary with all baseline scores
+
+    Notes
+    -----
+    IMPORTANT: Spatial methods (neighbor_diff, lisa, local_spatial_deviation,
+    spotsweeper) are always computed transductively on X, using the test set's
+    spatial structure. This means they can see the spatial neighborhood of test
+    spots, which may give them an advantage in train/test experiments compared
+    to methods that only use training data. When comparing in inductive settings,
+    this asymmetry should be acknowledged in the paper's Methods section.
+    Our method (Inv_PosError) is also evaluated transductively in the standard
+    setting (exp01/exp10), ensuring a fair comparison with spatial baselines.
     """
     return {
         # Spatial methods (always transductive - computed on X)

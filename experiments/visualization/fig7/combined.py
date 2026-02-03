@@ -36,7 +36,8 @@ from common import (
     COLORS, SINGLE_COL, DOUBLE_COL, RESULTS_DIR,
 )
 
-HER2ST_DIR = Path(os.environ.get("HER2ST_DIR", "/home/yutonose/Projects/her2st"))
+_default_her2st = Path(__file__).resolve().parent.parent.parent.parent.parent / "her2st"
+HER2ST_DIR = Path(os.environ.get("HER2ST_DIR", str(_default_her2st)))
 IMG_DIR = HER2ST_DIR / "data" / "ST-imgs"
 
 
@@ -173,9 +174,11 @@ def _draw_volcano(ax, deg_df, sample_id):
 
     ax.set_xlabel('log2 Fold Change\n(high error / low error)', fontsize=7)
     ax.set_ylabel('-log10(p-value)', fontsize=7)
-    # Note: horizontal line shows raw p=0.05; point coloring uses adjusted p-values
+    # Horizontal line shows raw p=0.05 for reference; point coloring uses
+    # adjusted p-values (Bonferroni or FDR). Points above this line but colored
+    # gray did not survive multiple testing correction.
     ax.axhline(-np.log10(0.05), color='gray', linestyle='--', linewidth=0.5, alpha=0.5,
-               label='p=0.05 (raw)')
+               label='p=0.05 (raw; colors use adjusted p)')
     ax.axvline(0, color='gray', linestyle='--', linewidth=0.5, alpha=0.5)
     ax.legend(fontsize=5, loc='upper right')
 

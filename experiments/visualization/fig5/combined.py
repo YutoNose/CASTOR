@@ -26,7 +26,8 @@ from common import (
     COLORS, SINGLE_COL, DOUBLE_COL, RESULTS_DIR
 )
 
-HER2ST_DIR = Path(os.environ.get("HER2ST_DIR", "/home/yutonose/Projects/her2st"))
+_default_her2st = Path(__file__).resolve().parent.parent.parent.parent.parent / "her2st"
+HER2ST_DIR = Path(os.environ.get("HER2ST_DIR", str(_default_her2st)))
 
 # Method display mapping for HER2ST data
 # Support both old column names (auc_pos, auc_pca) and new names (auc_inv_pos, auc_pca_error)

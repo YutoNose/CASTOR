@@ -15,6 +15,8 @@ Key Components:
 
 from .utils import (
     build_spatial_graph,
+    build_delaunay_graph,
+    build_radius_graph,
     aggregate_neighbors,
     robust_zscore,
     normalize_expression,
@@ -39,6 +41,7 @@ from .evaluation import (
     compute_position_accuracy,
     compute_correlation_matrix,
     statistical_tests,
+    apply_fdr_correction,
 )
 from .data_generation import (
     generate_synthetic_data,
@@ -67,6 +70,8 @@ from .real_data import (
 __all__ = [
     # Utils
     "build_spatial_graph",
+    "build_delaunay_graph",
+    "build_radius_graph",
     "aggregate_neighbors",
     "robust_zscore",
     "normalize_expression",
@@ -93,6 +98,7 @@ __all__ = [
     "compute_position_accuracy",
     "compute_correlation_matrix",
     "statistical_tests",
+    "apply_fdr_correction",
     # Data generation
     "generate_synthetic_data",
     "generate_controlled_ectopic",

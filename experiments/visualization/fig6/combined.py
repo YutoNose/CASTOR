@@ -36,7 +36,8 @@ from common import (
     COLORS, SINGLE_COL, DOUBLE_COL, RESULTS_DIR,
 )
 
-HER2ST_DIR = Path(os.environ.get("HER2ST_DIR", "/home/yutonose/Projects/her2st"))
+_default_her2st = Path(__file__).resolve().parent.parent.parent.parent.parent / "her2st"
+HER2ST_DIR = Path(os.environ.get("HER2ST_DIR", str(_default_her2st)))
 IMG_DIR = HER2ST_DIR / "data" / "ST-imgs"
 
 # Method display config
@@ -236,6 +237,22 @@ def _draw_transplant_overlay(ax, sample_data, sample_id, seed=42):
     ax.axis('off')
 
 
+def _bootstrap_ci(values, confidence=0.95, n_bootstrap=10000, seed=42):
+    """Compute bootstrap confidence interval for the mean."""
+    rng = np.random.RandomState(seed)
+    values = values.dropna().values if hasattr(values, 'dropna') else np.asarray(values)
+    n = len(values)
+    if n < 2:
+        return values.mean() if n == 1 else np.nan, 0.0, 0.0
+    boot_means = np.array([rng.choice(values, size=n, replace=True).mean()
+                           for _ in range(n_bootstrap)])
+    alpha = 1 - confidence
+    ci_lower = np.percentile(boot_means, 100 * alpha / 2)
+    ci_upper = np.percentile(boot_means, 100 * (1 - alpha / 2))
+    mean_val = values.mean()
+    return mean_val, mean_val - ci_lower, ci_upper - mean_val
+
+
 def _draw_method_comparison(ax, df):
     """Panel (c): Overall method AUC comparison (bar chart) with AUPRC annotations."""
     auc_cols = [c for c in TRANSPLANT_METHODS if c in df.columns]
@@ -244,6 +261,7 @@ def _draw_method_comparison(ax, df):
     for col in auc_cols:
         name, color = TRANSPLANT_METHODS[col]
         vals = df[col].dropna()
+        mean_val, ci_lo, ci_hi = _bootstrap_ci(vals)
         # Try to get AUPRC
         auprc_col = col.replace('auc_', 'auprc_')
         auprc_val = None
@@ -253,7 +271,7 @@ def _draw_method_comparison(ax, df):
                 auprc_val = auprc_vals.mean()
         method_stats.append({
             'name': name, 'color': color,
-            'mean': vals.mean(), 'std': vals.std(),
+            'mean': mean_val, 'ci_lo': ci_lo, 'ci_hi': ci_hi,
             'auprc': auprc_val,
         })
 
@@ -261,11 +279,12 @@ def _draw_method_comparison(ax, df):
 
     y_pos = np.arange(len(method_stats))
     means = [m['mean'] for m in method_stats]
-    stds = [m['std'] for m in method_stats]
+    ci_lo = [[m['ci_lo'] for m in method_stats]]
+    ci_hi = [[m['ci_hi'] for m in method_stats]]
     colors = [m['color'] for m in method_stats]
     names = [m['name'] for m in method_stats]
 
-    ax.barh(y_pos, means, xerr=stds, capsize=3,
+    ax.barh(y_pos, means, xerr=[ci_lo[0], ci_hi[0]], capsize=3,
             color=colors, edgecolor='black', linewidth=0.3, height=0.6)
 
     ax.set_yticks(y_pos)
@@ -274,15 +293,22 @@ def _draw_method_comparison(ax, df):
     ax.set_xlim(0, 1.15)
     ax.axvline(0.5, color='gray', linestyle=':', linewidth=0.5, alpha=0.7)
 
-    for i, (m, s) in enumerate(zip(means, stds)):
+    n_seeds = len(df)
+    for i, m in enumerate(means):
         auprc = method_stats[i].get('auprc')
+        ci_upper = method_stats[i]['ci_hi']
         if auprc is not None:
             label = f'{m:.3f} (PR:{auprc:.3f})'
         else:
             label = f'{m:.3f}'
-        ax.text(min(m + s + 0.03, 1.1), i, label, va='center', fontsize=5)
+        ax.text(min(m + ci_upper + 0.03, 1.1), i, label, va='center', fontsize=5)
 
     ax.invert_yaxis()
+
+    ax.text(0.98, 0.02, f'Error bars: 95% CI (bootstrap, n={n_seeds})',
+            transform=ax.transAxes, fontsize=5, ha='right', va='bottom',
+            color='gray',
+            bbox=dict(facecolor='white', edgecolor='none', alpha=0.85, pad=1.5))
 
 
 def _draw_per_sample(ax, df):
@@ -296,15 +322,18 @@ def _draw_per_sample(ax, df):
 
     for i, col in enumerate(available):
         name, color = TRANSPLANT_METHODS[col]
+        ci_los = []
+        ci_his = []
         means = []
-        stds = []
         for sample in samples:
             vals = df[df['sample_id'] == sample][col].dropna()
-            means.append(vals.mean())
-            stds.append(vals.std())
+            mean_val, ci_lo, ci_hi = _bootstrap_ci(vals)
+            means.append(mean_val)
+            ci_los.append(ci_lo)
+            ci_his.append(ci_hi)
 
         offsets = x_pos + (i - len(available)/2 + 0.5) * width
-        ax.bar(offsets, means, width, yerr=stds, capsize=2,
+        ax.bar(offsets, means, width, yerr=[ci_los, ci_his], capsize=2,
                label=name, color=color,
                edgecolor='black', linewidth=0.3)
 
@@ -315,6 +344,11 @@ def _draw_per_sample(ax, df):
     ax.set_ylim(0, 1.15)
     ax.axhline(0.5, color='gray', linestyle=':', linewidth=0.5, alpha=0.7)
     ax.legend(fontsize=5, loc='lower right')
+
+    ax.text(0.98, 0.02, 'Error bars: 95% CI (bootstrap)',
+            transform=ax.transAxes, fontsize=5, ha='right', va='bottom',
+            color='gray',
+            bbox=dict(facecolor='white', edgecolor='none', alpha=0.85, pad=1.5))
 
 
 # =============================================================================

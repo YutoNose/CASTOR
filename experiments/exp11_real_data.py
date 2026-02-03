@@ -204,9 +204,20 @@ def run_single_seed(
             random_state=seed,
         )
 
-    # Prepare training data
+    # Normalize using TRAINING statistics only to prevent test data leakage
+    X_train_log = np.log1p(X_train.astype(np.float64))
+    train_mean = X_train_log.mean(axis=0)
+    train_std = np.maximum(X_train_log.std(axis=0), 1e-8)
+
+    X_train_norm = (X_train_log - train_mean) / train_std
+    X_test_norm = (np.log1p(X_test.astype(np.float64)) - train_mean) / train_std
+
+    # Prepare training data (pre-normalized, skip log_transform and scale)
     k_train = min(config.k_neighbors, len(train_idx) - 1)
-    data_train = prepare_data(X_train, coords_train, k=k_train, device=config.device)
+    data_train = prepare_data(
+        X_train_norm, coords_train, k=k_train, device=config.device,
+        log_transform=False, scale=False,
+    )
 
     # Train model on clean data
     model = InversePredictionModel(
@@ -227,9 +238,15 @@ def run_single_seed(
         verbose=False,
     )
 
-    # Prepare test data
+    # Prepare test data (normalized with TRAINING statistics for both
+    # expression and coordinates, ensuring consistent normalization space)
     k_test = min(config.k_neighbors, len(test_idx) - 1)
-    data_test = prepare_data(X_test, coords_test, k=k_test, device=config.device)
+    data_test = prepare_data(
+        X_test_norm, coords_test, k=k_test, device=config.device,
+        log_transform=False, scale=False,
+        coords_ref_min=data_train["coords_min"],
+        coords_ref_range=data_train["coords_range"],
+    )
 
     # Compute scores
     scores = compute_scores(
@@ -261,10 +278,8 @@ def run_single_seed(
         result["auc_neighbor"] = roc_auc_score(ectopic_mask.astype(int), neighbor_diff)
         result["auc_lof"] = roc_auc_score(ectopic_mask.astype(int), lof_score)
 
-        # Position prediction analysis
-        coords_min = coords_test.min(axis=0)
-        coords_range = (coords_test.max(axis=0) - coords_test.min(axis=0)) + 1e-8
-        pos_pred_denorm = scores["pos_pred"] * coords_range + coords_min
+        # Position prediction analysis (denormalize using training stats)
+        pos_pred_denorm = scores["pos_pred"] * data_train["coords_range"] + data_train["coords_min"]
 
         ectopic_local = np.where(ectopic_mask)[0]
         pred_ect = pos_pred_denorm[ectopic_local]

@@ -29,18 +29,31 @@ from common import (
 )
 
 
+def _fisher_z_mean(r_values):
+    """Average correlation coefficients using Fisher z-transformation.
+
+    This is the statistically correct way to average Pearson correlations:
+    z = arctanh(r), average z-values, then back-transform: r_avg = tanh(z_avg).
+    """
+    r_values = np.asarray(r_values)
+    # Clamp to avoid arctanh(±1) = ±inf
+    r_clamped = np.clip(r_values, -0.9999, 0.9999)
+    z = np.arctanh(r_clamped)
+    return float(np.tanh(z.mean()))
+
+
 def _load_correlation_data():
     """Load real correlation data from exp05."""
     df = pd.read_csv(RESULTS_DIR / 'exp05_independence_analysis.csv')
 
-    # Available pairwise correlations (averaged across seeds)
+    # Available pairwise correlations (averaged across seeds using Fisher z)
     corr_pairs = {
-        ('Inv_PosError', 'PCA_Error'): df['corr_pos_pca_all'].mean(),
-        ('Inv_PosError', 'Neighbor_Diff'): df['corr_pos_neighbor_all'].mean(),
-        ('PCA_Error', 'Neighbor_Diff'): df['corr_pca_neighbor_all'].mean(),
-        ('Inv_PosError', 'LISA'): df['corr_pos_lisa'].mean(),
-        ('Inv_PosError', 'LOF'): df['corr_pos_lof'].mean(),
-        ('PCA_Error', 'LISA'): df['corr_pca_lisa'].mean(),
+        ('Inv_PosError', 'PCA_Error'): _fisher_z_mean(df['corr_pos_pca_all'].dropna()),
+        ('Inv_PosError', 'Neighbor_Diff'): _fisher_z_mean(df['corr_pos_neighbor_all'].dropna()),
+        ('PCA_Error', 'Neighbor_Diff'): _fisher_z_mean(df['corr_pca_neighbor_all'].dropna()),
+        ('Inv_PosError', 'LISA'): _fisher_z_mean(df['corr_pos_lisa'].dropna()),
+        ('Inv_PosError', 'LOF'): _fisher_z_mean(df['corr_pos_lof'].dropna()),
+        ('PCA_Error', 'LISA'): _fisher_z_mean(df['corr_pca_lisa'].dropna()),
     }
 
     # Add additional correlations if available (from updated exp05)
@@ -52,10 +65,10 @@ def _load_correlation_data():
     }
     for pair, col in optional_pairs.items():
         if col in df.columns:
-            corr_pairs[pair] = df[col].mean()
+            corr_pairs[pair] = _fisher_z_mean(df[col].dropna())
 
-    # Also compute mean independence metric
-    mean_independence = df['corr_pos_pca_all'].mean()
+    # Also compute mean independence metric (Fisher z)
+    mean_independence = _fisher_z_mean(df['corr_pos_pca_all'].dropna())
 
     return corr_pairs, mean_independence
 
@@ -133,6 +146,11 @@ def create_panel_a():
                 ax.text(j + 0.5, i + 0.5, '-', ha='center', va='center', fontsize=7, color='gray')
 
     ax.tick_params(axis='both', labelsize=6)
+
+    # Note: correlations averaged using Fisher z-transformation (arctanh)
+    ax.text(0.02, 0.02, 'Averaged via Fisher z-transform;\ngray: not measured',
+            transform=ax.transAxes, fontsize=4.5, color='gray', va='bottom')
+
     plt.tight_layout()
     return fig
 
@@ -160,7 +178,7 @@ def _compute_real_scores():
     exp05_file = RESULTS_DIR / 'exp05_independence_analysis.csv'
     if exp05_file.exists():
         exp05_df = pd.read_csv(exp05_file)
-        real_r = exp05_df['corr_pos_pca_all'].mean()
+        real_r = _fisher_z_mean(exp05_df['corr_pos_pca_all'].dropna())
 
     try:
         from core.data_generation import generate_synthetic_data
@@ -238,6 +256,12 @@ def create_panel_c():
         comb_ect = summary.loc['TwoAxis_Max', 'auc_ectopic']
         comb_int = summary.loc['TwoAxis_Max', 'auc_intrinsic']
     else:
+        import warnings
+        warnings.warn(
+            "TwoAxis_Max not found in exp02 data. Using element-wise max of "
+            "individual method means as an approximation.",
+            UserWarning,
+        )
         comb_ect = max(inv_ect, pca_ect)
         comb_int = max(inv_int, pca_int)
 
@@ -364,6 +388,11 @@ def _draw_combined_panel(ax):
         comb_ect = summary.loc['TwoAxis_Max', 'auc_ectopic']
         comb_int = summary.loc['TwoAxis_Max', 'auc_intrinsic']
     else:
+        import warnings
+        warnings.warn(
+            "TwoAxis_Max not found in exp02 data (combined panel).",
+            UserWarning,
+        )
         comb_ect = max(inv_ect, pca_ect)
         comb_int = max(inv_int, pca_int)
 

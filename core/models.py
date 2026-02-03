@@ -65,11 +65,14 @@ class InversePredictionModel(nn.Module):
         self.hid_dim = hid_dim
 
         # Encoder: Expression -> Embedding
+        # LayerNorm is used instead of BatchNorm1d because the model trains
+        # on the full dataset as a single batch (no mini-batching), making
+        # BatchNorm's running statistics unreliable during eval mode.
         self.encoder = nn.Sequential(
             nn.Linear(in_dim, hid_dim),
-            nn.Dropout(dropout),
-            nn.BatchNorm1d(hid_dim),
+            nn.LayerNorm(hid_dim),
             nn.ReLU(),
+            nn.Dropout(dropout),
             nn.Linear(hid_dim, hid_dim),
         )
 
@@ -147,12 +150,14 @@ def train_model(
     lr: float = 1e-3,
     lambda_pos: float = 0.5,
     lambda_self: float = 1.0,
+    lambda_neighbor: float = 1.0,
     verbose: bool = True,
 ) -> nn.Module:
     """
     Train the inverse prediction model.
 
-    Loss = lambda_self * MSE(x_self, x) + lambda_pos * MSE(pos_pred, coords) + MSE(x_neighbor, x)
+    Loss = lambda_self * MSE(x_self, x) + lambda_pos * MSE(pos_pred, coords)
+         + lambda_neighbor * MSE(x_neighbor, x)
 
     Parameters
     ----------
@@ -172,6 +177,8 @@ def train_model(
         Weight for position prediction loss
     lambda_self : float
         Weight for self-reconstruction loss
+    lambda_neighbor : float
+        Weight for neighbor reconstruction loss
     verbose : bool
         Print training progress
 
@@ -180,7 +187,7 @@ def train_model(
     model : nn.Module
         Trained model
     """
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     model.train()
 
     for epoch in range(n_epochs):
@@ -196,10 +203,11 @@ def train_model(
         loss_neighbor = F.mse_loss(x_neighbor, x)
 
         # Combined loss
-        loss = lambda_self * loss_self + lambda_pos * loss_pos + loss_neighbor
+        loss = lambda_self * loss_self + lambda_pos * loss_pos + lambda_neighbor * loss_neighbor
 
         optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
 
         if verbose and (epoch + 1) % 20 == 0:
@@ -252,11 +260,21 @@ def compute_scores(
         - pos_pred: Predicted positions [n_spots, 2]
     """
     model.eval()
+
+    # Ensure all inputs are on the same device as the model
+    model_device = next(model.parameters()).device
+    x = x.to(model_device)
+    coords = coords.to(model_device)
+    edge_index = edge_index.to(model_device)
+
     with torch.no_grad():
         h, pos_pred, x_self, x_neighbor = model(x, edge_index)
 
-        # Ectopic score: position prediction error (squared L2 distance)
-        s_pos = ((pos_pred - coords) ** 2).sum(dim=1).cpu().numpy()
+        # Ectopic score: position prediction error (mean squared error per spot).
+        # mean(dim=1) averages over the 2 coordinate dimensions, consistent with
+        # the reconstruction scores below. For 2D coords this is equivalent to
+        # sum(dim=1)/2, so it preserves AUC ranking (monotonic transform).
+        s_pos = ((pos_pred - coords) ** 2).mean(dim=1).cpu().numpy()
 
         # Self-reconstruction error (mean squared error per spot)
         s_self = ((x - x_self) ** 2).mean(dim=1).cpu().numpy()

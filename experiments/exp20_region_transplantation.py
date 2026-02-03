@@ -26,6 +26,7 @@ Seeds: 10 per sample (same as exp17)
 Minimum normal spots required: 30 (skip samples with fewer)
 """
 
+import gzip
 import numpy as np
 import pandas as pd
 from scipy import sparse, stats
@@ -188,14 +189,10 @@ def transplant_region_to_normal(
 
         recipient_spots = np.array(recipient_spots)
 
-        # Pick donor center from distant tumor spots
-        dists_to_recipient = np.linalg.norm(
-            coords[tumor_idx] - coords[recipient_center], axis=1
-        )
-        distant_half = tumor_idx[dists_to_recipient > np.median(dists_to_recipient)]
-        if len(distant_half) == 0:
-            distant_half = tumor_idx
-        donor_center = rng.choice(distant_half)
+        # Pick donor center uniformly at random from all tumor spots
+        # (no distance bias — avoids systematic overrepresentation of
+        # distant donors that could inflate detection performance)
+        donor_center = rng.choice(tumor_idx)
 
         # For each recipient, find corresponding donor via offset mapping
         for r_idx in recipient_spots:
@@ -250,6 +247,7 @@ def evaluate_transplant_detection(
     seed: int,
     config: ExperimentConfig,
     n_top_genes: int = 2000,
+    X_original: np.ndarray = None,
 ) -> dict:
     """
     Train model on modified data and evaluate detection of transplanted spots.
@@ -268,6 +266,9 @@ def evaluate_transplant_detection(
         Configuration
     n_top_genes : int
         Number of HVGs for training
+    X_original : np.ndarray
+        Pre-transplant expression matrix for HVG selection.
+        Required to avoid data leakage from transplanted spots.
 
     Returns
     -------
@@ -275,11 +276,14 @@ def evaluate_transplant_detection(
     """
     set_seed(seed)
 
-    # HVG selection
-    gene_means = X_modified.mean(axis=0) + 1e-8
-    gene_vars = X_modified.var(axis=0)
+    # HVG selection on pre-transplant data to avoid data leak
+    if X_original is None:
+        raise ValueError("X_original is required for HVG selection to avoid data leakage")
+    X_for_hvg = X_original
+    gene_means = X_for_hvg.mean(axis=0) + 1e-8
+    gene_vars = X_for_hvg.var(axis=0)
     fano = gene_vars / gene_means
-    n_select = min(n_top_genes, X_modified.shape[1])
+    n_select = min(n_top_genes, X_for_hvg.shape[1])
     hvg_idx = np.argsort(fano)[-n_select:]
     hvg_idx = np.sort(hvg_idx)
     X_hvg = X_modified[:, hvg_idx]
@@ -404,7 +408,6 @@ def run_region_transplantation_experiment(
         X_raw = X_sparse.toarray() if sparse.issparse(X_sparse) else np.asarray(X_sparse)
 
         # Load pathologist labels directly
-        import gzip
         labels_file = loader.labels_dir / f"{sample_id}_labeled_coordinates.tsv"
         labels_df = pd.read_csv(labels_file, sep="\t")
         labels_df = labels_df.dropna(subset=["x", "y"])
@@ -443,8 +446,11 @@ def run_region_transplantation_experiment(
                       f"(need >= {min_normal_spots})")
             continue
 
-        for region_size in region_sizes:
+        for rs_idx, region_size in enumerate(region_sizes):
             for seed in seeds:
+                # Decorrelate seeds across region sizes to avoid
+                # correlated sampling from the same RNG trajectory
+                transplant_seed = seed * len(region_sizes) + rs_idx
                 if verbose:
                     print(f"  region_size={region_size}, seed={seed}...",
                           end=" ", flush=True)
@@ -454,7 +460,7 @@ def run_region_transplantation_experiment(
                         X_raw, coords, tissue_labels,
                         region_size=region_size,
                         n_total_transplant=n_total_transplant,
-                        random_state=seed,
+                        random_state=transplant_seed,
                     )
 
                     if transplant["n_transplanted"] == 0:
@@ -472,6 +478,7 @@ def run_region_transplantation_experiment(
                         transplant["transplant_mask"],
                         seed=seed,
                         config=config,
+                        X_original=transplant["X_original"],
                     )
 
                     eval_result["region_size"] = region_size

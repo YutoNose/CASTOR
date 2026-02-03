@@ -48,11 +48,14 @@ class InversePredictionModel(nn.Module):
         self.in_dim = in_dim
         self.hid_dim = hid_dim
 
+        # LayerNorm is used instead of BatchNorm1d because the model trains
+        # on the full dataset as a single batch (no mini-batching), making
+        # BatchNorm's running statistics unreliable during eval mode.
         self.encoder = nn.Sequential(
             nn.Linear(in_dim, hid_dim),
-            nn.Dropout(dropout),
-            nn.BatchNorm1d(hid_dim),
+            nn.LayerNorm(hid_dim),
             nn.ReLU(),
+            nn.Dropout(dropout),
             nn.Linear(hid_dim, hid_dim),
         )
 

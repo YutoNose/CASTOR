@@ -21,13 +21,14 @@ def train_model(
     lr: float = 1e-3,
     lambda_pos: float = 0.5,
     lambda_self: float = 1.0,
+    lambda_neighbor: float = 1.0,
     verbose: bool = True,
 ) -> torch.nn.Module:
     """Train the inverse prediction model.
 
     Loss = lambda_self * MSE(x_self, x)
          + lambda_pos * MSE(pos_pred, coords)
-         + MSE(x_neighbor, x)
+         + lambda_neighbor * MSE(x_neighbor, x)
 
     Parameters
     ----------
@@ -55,7 +56,7 @@ def train_model(
     nn.Module
         Trained model.
     """
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     model.train()
 
     for epoch in range(n_epochs):
@@ -65,10 +66,11 @@ def train_model(
         loss_pos = F.mse_loss(pos_pred, coords)
         loss_neighbor = F.mse_loss(x_neighbor, x)
 
-        loss = lambda_self * loss_self + lambda_pos * loss_pos + loss_neighbor
+        loss = lambda_self * loss_self + lambda_pos * loss_pos + lambda_neighbor * loss_neighbor
 
         optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
 
         if verbose and (epoch + 1) % 20 == 0:
@@ -101,10 +103,19 @@ def compute_scores(
         ``embedding``, ``pos_pred``.
     """
     model.eval()
+
+    # Ensure all inputs are on the same device as the model
+    model_device = next(model.parameters()).device
+    x = x.to(model_device)
+    coords = coords.to(model_device)
+    edge_index = edge_index.to(model_device)
+
     with torch.no_grad():
         h, pos_pred, x_self, x_neighbor = model(x, edge_index)
 
-        s_pos = ((pos_pred - coords) ** 2).sum(dim=1).cpu().numpy()
+        # Position prediction error: mean over 2D coordinates per spot.
+        # Equivalent to sum/2 for 2D, preserves AUC ranking.
+        s_pos = ((pos_pred - coords) ** 2).mean(dim=1).cpu().numpy()
         s_self = ((x - x_self) ** 2).mean(dim=1).cpu().numpy()
         s_neighbor = ((x - x_neighbor) ** 2).mean(dim=1).cpu().numpy()
 

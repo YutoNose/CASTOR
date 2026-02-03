@@ -52,6 +52,7 @@ def compute_auc_metrics(
     """
     ectopic_mask = labels == ectopic_label
     intrinsic_mask = labels == intrinsic_label
+    normal_mask = (labels != ectopic_label) & (labels != intrinsic_label)
 
     results = []
 
@@ -60,8 +61,8 @@ def compute_auc_metrics(
         score = np.nan_to_num(score, nan=0.0, posinf=0.0, neginf=0.0)
 
         # Ectopic AUC: Ectopic vs ALL others (including intrinsic)
-        # This is the realistic evaluation scenario
-        if ectopic_mask.sum() > 0:
+        # This is the "any anomaly" detection scenario
+        if ectopic_mask.sum() > 0 and (~ectopic_mask).sum() > 0:
             y_ect = ectopic_mask.astype(int)
             auc_ectopic = roc_auc_score(y_ect, score)
             ap_ectopic = average_precision_score(y_ect, score)
@@ -69,14 +70,36 @@ def compute_auc_metrics(
             auc_ectopic = np.nan
             ap_ectopic = np.nan
 
+        # Ectopic vs Normal ONLY (excluding intrinsic from evaluation)
+        # This is the proper type-specific evaluation
+        if ectopic_mask.sum() > 0 and normal_mask.sum() > 0:
+            eval_mask = ectopic_mask | normal_mask
+            y_ect_vs_normal = ectopic_mask[eval_mask].astype(int)
+            auc_ectopic_vs_normal = roc_auc_score(y_ect_vs_normal, score[eval_mask])
+            ap_ectopic_vs_normal = average_precision_score(y_ect_vs_normal, score[eval_mask])
+        else:
+            auc_ectopic_vs_normal = np.nan
+            ap_ectopic_vs_normal = np.nan
+
         # Intrinsic AUC: Intrinsic vs ALL others (including ectopic)
-        if intrinsic_mask.sum() > 0:
+        if intrinsic_mask.sum() > 0 and (~intrinsic_mask).sum() > 0:
             y_int = intrinsic_mask.astype(int)
             auc_intrinsic = roc_auc_score(y_int, score)
             ap_intrinsic = average_precision_score(y_int, score)
         else:
             auc_intrinsic = np.nan
             ap_intrinsic = np.nan
+
+        # Intrinsic vs Normal ONLY (excluding ectopic from evaluation)
+        # This is the proper type-specific evaluation
+        if intrinsic_mask.sum() > 0 and normal_mask.sum() > 0:
+            eval_mask = intrinsic_mask | normal_mask
+            y_int_vs_normal = intrinsic_mask[eval_mask].astype(int)
+            auc_intrinsic_vs_normal = roc_auc_score(y_int_vs_normal, score[eval_mask])
+            ap_intrinsic_vs_normal = average_precision_score(y_int_vs_normal, score[eval_mask])
+        else:
+            auc_intrinsic_vs_normal = np.nan
+            ap_intrinsic_vs_normal = np.nan
 
         results.append(
             {
@@ -85,6 +108,10 @@ def compute_auc_metrics(
                 "auc_intrinsic": auc_intrinsic,
                 "ap_ectopic": ap_ectopic,
                 "ap_intrinsic": ap_intrinsic,
+                "auc_ectopic_vs_normal": auc_ectopic_vs_normal,
+                "auc_intrinsic_vs_normal": auc_intrinsic_vs_normal,
+                "ap_ectopic_vs_normal": ap_ectopic_vs_normal,
+                "ap_intrinsic_vs_normal": ap_intrinsic_vs_normal,
                 "selectivity_ectopic": auc_ectopic - auc_intrinsic,
                 "selectivity_intrinsic": auc_intrinsic - auc_ectopic,
             }
@@ -277,9 +304,13 @@ def statistical_tests(
     alpha : float
         Significance level (before correction)
     correction : str
-        Multiple testing correction method ('bonferroni' or 'none')
+        Multiple testing correction method ('bonferroni', 'fdr_bh', or 'none').
+        'fdr_bh' applies Benjamini-Hochberg FDR correction to this p-value
+        given n_comparisons total tests. Note: for proper FDR correction
+        across a family of tests, use ``apply_fdr_correction`` on the
+        collected p-values after running all pairwise tests.
     n_comparisons : int
-        Number of comparisons for Bonferroni correction
+        Number of comparisons for correction
 
     Returns
     -------
@@ -294,12 +325,16 @@ def statistical_tests(
     values1 = values1[mask]
     values2 = values2[mask]
 
-    if len(values1) < 5:
+    # Wilcoxon signed-rank test requires n >= 10 for reliable inference
+    # (Conover 1999, "Practical Nonparametric Statistics").
+    # Return NaN for significance to distinguish "not testable" from "not significant".
+    if len(values1) < 10:
         return {
             "statistic": np.nan,
             "p_value": np.nan,
-            "significant": False,
+            "significant": np.nan,
             "n_samples": len(values1),
+            "warning": "insufficient_sample_size",
         }
 
     try:
@@ -314,14 +349,18 @@ def statistical_tests(
 
     n = len(values1)
 
-    # Effect size: matched-pairs rank-biserial correlation (Kerby 2014)
+    # Signed rank-biserial correlation (Kerby 2014)
+    # r = (W+ - W-) / (W+ + W-)  where W+ + W- = n*(n+1)/2
     # |r| < 0.1 negligible, 0.1-0.3 small, 0.3-0.5 medium, > 0.5 large
-    # stat = min(W+, W-), so magnitude = 1 - 4*stat/(n*(n+1))
-    # Sign from mean difference to indicate direction
-    effect_magnitude = 1 - 4 * stat / (n * (n + 1))
-    effect_size = effect_magnitude * np.sign(np.mean(values1 - values2))
+    #
+    # Since scipy 1.9, wilcoxon returns W+ (sum of positively signed ranks)
+    # by default (alternative="two-sided").
+    W_plus = stat
+    total = n * (n + 1) / 2
+    W_minus = total - W_plus
+    effect_size = (W_plus - W_minus) / total if total > 0 else 0.0
 
-    # Apply Bonferroni correction
+    # Apply multiple testing correction
     if correction == "bonferroni" and n_comparisons > 1:
         adjusted_alpha = alpha / n_comparisons
     else:
@@ -335,7 +374,80 @@ def statistical_tests(
         "n_samples": n,
         "mean_diff": float(np.mean(values1 - values2)),
         "adjusted_alpha": adjusted_alpha,
+        "correction": correction,
         "n_comparisons": n_comparisons,
+    }
+
+
+def apply_fdr_correction(
+    p_values: List[float],
+    alpha: float = 0.05,
+    method: str = "fdr_bh",
+) -> Dict[str, np.ndarray]:
+    """
+    Apply FDR (Benjamini-Hochberg) correction to a family of p-values.
+
+    This should be called after collecting p-values from multiple
+    ``statistical_tests`` calls to properly control the false discovery rate
+    across all comparisons.
+
+    Parameters
+    ----------
+    p_values : list of float
+        Raw p-values from multiple tests.
+    alpha : float
+        Desired FDR level (default 0.05).
+    method : str
+        Correction method. 'fdr_bh' for Benjamini-Hochberg (default),
+        'bonferroni' for Bonferroni.
+
+    Returns
+    -------
+    result : dict
+        Keys:
+        - ``p_adjusted``: array of adjusted p-values
+        - ``reject``: boolean array indicating which hypotheses are rejected
+        - ``method``: correction method used
+    """
+    p_arr = np.asarray(p_values, dtype=float)
+    n = len(p_arr)
+
+    if n == 0:
+        return {
+            "p_adjusted": np.array([]),
+            "reject": np.array([], dtype=bool),
+            "method": method,
+        }
+
+    if method == "bonferroni":
+        p_adjusted = np.minimum(p_arr * n, 1.0)
+        reject = p_adjusted < alpha
+    elif method == "fdr_bh":
+        # Benjamini-Hochberg procedure
+        sorted_idx = np.argsort(p_arr)
+        sorted_p = p_arr[sorted_idx]
+        ranks = np.arange(1, n + 1)
+
+        # Adjusted p-values: p_adj[i] = min(p[i] * n / rank[i], 1.0)
+        # enforced to be monotonically non-decreasing from the largest rank
+        adjusted = np.minimum(sorted_p * n / ranks, 1.0)
+        # Enforce monotonicity: working backwards from the largest
+        for i in range(n - 2, -1, -1):
+            adjusted[i] = min(adjusted[i], adjusted[i + 1])
+
+        # Unsort
+        p_adjusted = np.empty(n)
+        p_adjusted[sorted_idx] = adjusted
+        reject = p_adjusted < alpha
+    else:
+        # No correction
+        p_adjusted = p_arr.copy()
+        reject = p_adjusted < alpha
+
+    return {
+        "p_adjusted": p_adjusted,
+        "reject": reject,
+        "method": method,
     }
 
 

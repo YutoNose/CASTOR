@@ -23,6 +23,7 @@ No fabricated data. No fallbacks.
 import numpy as np
 import pandas as pd
 from scipy import sparse
+import gzip
 import sys
 import os
 import warnings
@@ -101,7 +102,6 @@ def run_interpretability_analysis(
         )
 
         # Align labels with counts (same approach as exp17)
-        import gzip
         counts_file = loader.counts_dir / f"{sample_id}.tsv.gz"
         with gzip.open(counts_file, "rt") as f:
             counts_df = pd.read_csv(f, sep="\t", index_col=0)
@@ -165,11 +165,11 @@ def run_interpretability_analysis(
             for i in range(n_actual):
                 X_modified[recipient_idx[i]] = X_raw[donor_idx[i]].copy()
 
-            # HVG selection
-            gene_means = X_modified.mean(axis=0) + 1e-8
-            gene_vars = X_modified.var(axis=0)
+            # HVG selection on pre-transplant data to avoid data leakage
+            gene_means = X_raw.mean(axis=0) + 1e-8
+            gene_vars = X_raw.var(axis=0)
             fano = gene_vars / gene_means
-            n_select = min(n_top_genes, X_modified.shape[1])
+            n_select = min(n_top_genes, X_raw.shape[1])
             hvg_idx = np.argsort(fano)[-n_select:]
             hvg_idx = np.sort(hvg_idx)
             X_hvg = X_modified[:, hvg_idx]

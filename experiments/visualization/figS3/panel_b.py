@@ -1,7 +1,7 @@
 """
 Figure S3 Panel B: Cosine Similarity Distribution
 
-Cosine similarity distribution with one-sample t-test vs 0.
+Cosine similarity distribution with Wilcoxon signed-rank test vs 0.
 """
 
 import numpy as np
@@ -54,9 +54,7 @@ def draw(ax, df=None):
     ax.axvline(0, color="gray", lw=1.5, ls="--", alpha=0.7,
                label="Random (0)")
 
-    t_stat, pval = stats.ttest_1samp(cs, 0, alternative='greater')
-
-    # Use scipy's built-in one-sided test (tests if distribution > 0)
+    # Wilcoxon signed-rank test (non-parametric, appropriate for bounded data)
     w_stat, w_pval = stats.wilcoxon(cs, alternative='greater')
 
     ax.set_xlabel("Cosine Similarity\n(displacement vs donor direction)", fontsize=7)
@@ -66,7 +64,6 @@ def draw(ax, df=None):
     frac_positive = n_positive / len(cs)
     stats_text = (f"n = {len(cs)}\n"
                   f"{frac_positive:.1%} toward donor\n"
-                  f"t-test p = {pval:.2e}\n"
                   f"Wilcoxon p = {w_pval:.2e}")
     ax.text(0.97, 0.97, stats_text, transform=ax.transAxes,
             ha="right", va="top", fontsize=6,

@@ -35,6 +35,7 @@ from core import (
     compute_separation_auc,
     set_seed,
 )
+from core.evaluation import apply_fdr_correction
 
 
 def run_single_seed(seed: int, config: ExperimentConfig, verbose: bool = False):
@@ -98,23 +99,27 @@ def run_single_seed(seed: int, config: ExperimentConfig, verbose: bool = False):
     # 1. Correlation analysis (all spots)
     # Pearson (linear) and Spearman (monotonic, robust to skewed distributions)
     corr_pos_pca, pval_pos_pca = stats.pearsonr(s_pos, s_pca)
-    corr_pos_neighbor, _ = stats.pearsonr(s_pos, s_neighbor)
-    corr_pca_neighbor, _ = stats.pearsonr(s_pca, s_neighbor)
+    corr_pos_neighbor, pval_pos_neighbor = stats.pearsonr(s_pos, s_neighbor)
+    corr_pca_neighbor, pval_pca_neighbor = stats.pearsonr(s_pca, s_neighbor)
 
     results["corr_pos_pca_all"] = corr_pos_pca
     results["corr_pos_pca_pval"] = pval_pos_pca
     results["corr_pos_neighbor_all"] = corr_pos_neighbor
+    results["corr_pos_neighbor_pval"] = pval_pos_neighbor
     results["corr_pca_neighbor_all"] = corr_pca_neighbor
+    results["corr_pca_neighbor_pval"] = pval_pca_neighbor
 
     # Spearman rank correlation (more appropriate for right-skewed anomaly scores)
     sp_pos_pca, sp_pos_pca_pval = stats.spearmanr(s_pos, s_pca)
-    sp_pos_neighbor, _ = stats.spearmanr(s_pos, s_neighbor)
-    sp_pca_neighbor, _ = stats.spearmanr(s_pca, s_neighbor)
+    sp_pos_neighbor, sp_pos_neighbor_pval = stats.spearmanr(s_pos, s_neighbor)
+    sp_pca_neighbor, sp_pca_neighbor_pval = stats.spearmanr(s_pca, s_neighbor)
 
     results["spearman_pos_pca_all"] = sp_pos_pca
     results["spearman_pos_pca_pval"] = sp_pos_pca_pval
     results["spearman_pos_neighbor_all"] = sp_pos_neighbor
+    results["spearman_pos_neighbor_pval"] = sp_pos_neighbor_pval
     results["spearman_pca_neighbor_all"] = sp_pca_neighbor
+    results["spearman_pca_neighbor_pval"] = sp_pca_neighbor_pval
 
     # 2. Correlation on normal spots only
     if normal_mask.sum() > 10:
@@ -130,6 +135,21 @@ def run_single_seed(seed: int, config: ExperimentConfig, verbose: bool = False):
         results["corr_pos_pca_anomaly"] = corr_anomaly
         sp_anomaly, _ = stats.spearmanr(s_pos[anomaly_mask], s_pca[anomaly_mask])
         results["spearman_pos_pca_anomaly"] = sp_anomaly
+
+    # 3b. Nonlinear independence test (mutual information via k-NN estimator)
+    # Pearson/Spearman only detect linear/monotonic dependencies; MI detects any
+    try:
+        from sklearn.feature_selection import mutual_info_regression
+        # MI between s_pos and s_pca (normalized to [0,1] for comparability)
+        s_pos_norm = (s_pos - s_pos.min()) / (s_pos.max() - s_pos.min() + 1e-10)
+        s_pca_norm = (s_pca - s_pca.min()) / (s_pca.max() - s_pca.min() + 1e-10)
+        mi_pos_pca = mutual_info_regression(
+            s_pos_norm.reshape(-1, 1), s_pca_norm,
+            random_state=seed, n_neighbors=5
+        )[0]
+        results["mi_pos_pca"] = mi_pos_pca
+    except Exception:
+        results["mi_pos_pca"] = np.nan
 
     # 4. Separation AUC: Can we distinguish Ectopic from Intrinsic?
     sep_auc = compute_separation_auc(s_pos, s_pca, labels)
@@ -191,6 +211,23 @@ def run(config: ExperimentConfig = None, verbose: bool = True) -> pd.DataFrame:
         raise RuntimeError("All seeds failed in exp05_independence")
     results = pd.DataFrame(all_results)
 
+    # Apply FDR correction across all correlation p-values per seed.
+    # 6 tests per seed: 3 Pearson + 3 Spearman on all-spots correlations.
+    pval_cols = [
+        "corr_pos_pca_pval", "corr_pos_neighbor_pval", "corr_pca_neighbor_pval",
+        "spearman_pos_pca_pval", "spearman_pos_neighbor_pval", "spearman_pca_neighbor_pval",
+    ]
+    for col in pval_cols:
+        results[col.replace("_pval", "_pval_fdr")] = np.nan
+
+    for idx in results.index:
+        raw_pvals = [results.loc[idx, c] for c in pval_cols]
+        if any(np.isnan(p) for p in raw_pvals):
+            continue
+        fdr_result = apply_fdr_correction(raw_pvals, alpha=0.05, method="fdr_bh")
+        for j, col in enumerate(pval_cols):
+            results.loc[idx, col.replace("_pval", "_pval_fdr")] = fdr_result["p_adjusted"][j]
+
     if verbose:
         print("\n" + "=" * 60)
         print("Independence Analysis Summary")
@@ -204,6 +241,13 @@ def run(config: ExperimentConfig = None, verbose: bool = True) -> pd.DataFrame:
         print(f"  Inv_PosError vs PCA_Error (all):     {results['spearman_pos_pca_all'].mean():.3f} ± {results['spearman_pos_pca_all'].std():.3f}")
         print(f"  Inv_PosError vs PCA_Error (normal):  {results['spearman_pos_pca_normal'].mean():.3f} ± {results['spearman_pos_pca_normal'].std():.3f}")
         print(f"  Inv_PosError vs Neighbor_Diff:       {results['spearman_pos_neighbor_all'].mean():.3f} ± {results['spearman_pos_neighbor_all'].std():.3f}")
+
+        # Report FDR-corrected median p-values
+        print(f"\nFDR-corrected p-values (median across seeds):")
+        print(f"  Pearson  Pos-PCA:      {results['corr_pos_pca_pval_fdr'].median():.2e}")
+        print(f"  Pearson  Pos-Neighbor: {results['corr_pos_neighbor_pval_fdr'].median():.2e}")
+        print(f"  Spearman Pos-PCA:      {results['spearman_pos_pca_pval_fdr'].median():.2e}")
+        print(f"  Spearman Pos-Neighbor: {results['spearman_pos_neighbor_pval_fdr'].median():.2e}")
 
         print(f"\nSeparation Power:")
         print(f"  Ectopic vs Intrinsic AUC: {results['separation_auc'].mean():.3f} ± {results['separation_auc'].std():.3f}")

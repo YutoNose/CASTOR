@@ -7,6 +7,7 @@ eliminating code duplication.
 
 import numpy as np
 import torch
+from scipy.spatial import Delaunay
 from sklearn.neighbors import NearestNeighbors
 from typing import Optional
 
@@ -40,6 +41,73 @@ def build_spatial_graph(coords: np.ndarray, k: int = 15) -> torch.Tensor:
     return torch.tensor([row, col], dtype=torch.long)
 
 
+def build_delaunay_graph(coords: np.ndarray) -> torch.Tensor:
+    """
+    Build Delaunay triangulation graph from coordinates.
+
+    Parameters
+    ----------
+    coords : np.ndarray
+        Spatial coordinates [n_spots, 2]
+
+    Returns
+    -------
+    edge_index : torch.Tensor
+        Edge index [2, n_edges] for message passing
+    """
+    tri = Delaunay(coords)
+    edges = set()
+    for simplex in tri.simplices:
+        for i in range(3):
+            for j in range(i + 1, 3):
+                a, b = simplex[i], simplex[j]
+                edges.add((a, b))
+                edges.add((b, a))
+
+    if len(edges) == 0:
+        return torch.zeros((2, 0), dtype=torch.long)
+
+    edges = sorted(edges)
+    row = [e[0] for e in edges]
+    col = [e[1] for e in edges]
+    return torch.tensor([row, col], dtype=torch.long)
+
+
+def build_radius_graph(coords: np.ndarray, radius: float) -> torch.Tensor:
+    """
+    Build radius-based spatial graph from coordinates.
+
+    Each spot is connected to all other spots within a given radius.
+
+    Parameters
+    ----------
+    coords : np.ndarray
+        Spatial coordinates [n_spots, 2]
+    radius : float
+        Connection radius (in same units as coords)
+
+    Returns
+    -------
+    edge_index : torch.Tensor
+        Edge index [2, n_edges] for message passing
+    """
+    nn = NearestNeighbors(radius=radius)
+    nn.fit(coords)
+    distances, indices = nn.radius_neighbors(coords)
+
+    row, col = [], []
+    for i, neighbors in enumerate(indices):
+        for j in neighbors:
+            if i != j:  # Skip self-loops
+                row.append(i)
+                col.append(j)
+
+    if len(row) == 0:
+        return torch.zeros((2, 0), dtype=torch.long)
+
+    return torch.tensor([row, col], dtype=torch.long)
+
+
 def aggregate_neighbors(
     h: torch.Tensor,
     edge_index: torch.Tensor,
@@ -62,6 +130,9 @@ def aggregate_neighbors(
     h_agg : torch.Tensor
         Aggregated features [n_nodes, hidden_dim]
     """
+    assert edge_index.shape[0] == 2, (
+        f"edge_index must be [2, n_edges], got {edge_index.shape}"
+    )
     row, col = edge_index
     out = torch.zeros_like(h)
     out.index_add_(0, row, h[col])
@@ -100,37 +171,65 @@ def robust_zscore(x: np.ndarray) -> np.ndarray:
     if mad < 1e-10:
         return np.zeros_like(x)
 
+    # 1.4826 is the MAD-to-SD conversion factor for normal distributions:
+    # 1 / Φ^(-1)(3/4) ≈ 1.4826, where Φ is the standard normal CDF
     return (x - med) / (mad * 1.4826)
 
 
-def normalize_coordinates(coords: np.ndarray) -> np.ndarray:
+def normalize_coordinates(
+    coords: np.ndarray,
+    ref_min: Optional[np.ndarray] = None,
+    ref_range: Optional[np.ndarray] = None,
+) -> "tuple[np.ndarray, np.ndarray, np.ndarray]":
     """
     Normalize coordinates to [0, 1] range.
+
+    When ``ref_min`` and ``ref_range`` are provided (e.g. from training data),
+    the same transform is applied to new coordinates, ensuring consistent
+    normalization between train and test sets.
 
     Parameters
     ----------
     coords : np.ndarray
         Spatial coordinates [n_spots, 2]
+    ref_min : np.ndarray, optional
+        Reference minimum (e.g. from training coordinates)
+    ref_range : np.ndarray, optional
+        Reference range (e.g. from training coordinates)
 
     Returns
     -------
     coords_norm : np.ndarray
         Normalized coordinates in [0, 1]
+    c_min : np.ndarray
+        Minimum used for normalization (pass as ``ref_min`` for test data)
+    c_range : np.ndarray
+        Range used for normalization (pass as ``ref_range`` for test data)
     """
-    c_min = coords.min(axis=0)
-    c_max = coords.max(axis=0)
-    c_range = c_max - c_min  # np.ptp is deprecated in NumPy 2.0
+    if ref_min is not None and ref_range is not None:
+        c_min = ref_min
+        c_range = ref_range
+    else:
+        c_min = coords.min(axis=0)
+        c_max = coords.max(axis=0)
+        c_range = c_max - c_min  # np.ptp is deprecated in NumPy 2.0
     c_range = np.maximum(c_range, 1e-8)  # Avoid division by zero
-    return (coords - c_min) / c_range
+    return (coords - c_min) / c_range, c_min, c_range
 
 
 def normalize_expression(
     X: np.ndarray,
     log_transform: bool = True,
     scale: bool = True,
-) -> np.ndarray:
+    ref_mean: Optional[np.ndarray] = None,
+    ref_std: Optional[np.ndarray] = None,
+) -> "tuple[np.ndarray, np.ndarray, np.ndarray]":
     """
     Normalize expression matrix.
+
+    When ``ref_mean`` and ``ref_std`` are provided (e.g. from training data),
+    the same transform is applied to new data, ensuring consistent
+    normalization between train and test sets.
 
     Parameters
     ----------
@@ -140,11 +239,19 @@ def normalize_expression(
         Apply log1p transformation
     scale : bool
         Standardize to zero mean and unit variance per gene
+    ref_mean : np.ndarray, optional
+        Reference mean (e.g. from training expression after log1p)
+    ref_std : np.ndarray, optional
+        Reference std (e.g. from training expression after log1p)
 
     Returns
     -------
     X_norm : np.ndarray
         Normalized expression matrix
+    mean : np.ndarray
+        Mean used for normalization (pass as ``ref_mean`` for test data)
+    std : np.ndarray
+        Std used for normalization (pass as ``ref_std`` for test data)
     """
     X = np.asarray(X, dtype=np.float64)
 
@@ -152,12 +259,19 @@ def normalize_expression(
         X = np.log1p(X)
 
     if scale:
-        mean = X.mean(axis=0)
-        std = X.std(axis=0)
+        if ref_mean is not None and ref_std is not None:
+            mean = ref_mean
+            std = ref_std
+        else:
+            mean = X.mean(axis=0)
+            std = X.std(axis=0)
         std = np.maximum(std, 1e-8)  # Avoid division by zero
         X = (X - mean) / std
+    else:
+        mean = np.zeros(X.shape[1])
+        std = np.ones(X.shape[1])
 
-    return X
+    return X, mean, std
 
 
 def compute_neighbor_means(

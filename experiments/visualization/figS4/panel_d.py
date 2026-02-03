@@ -7,7 +7,6 @@ Figure S4 Panel D: Confidence Intervals
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from scipy import stats
 from pathlib import Path
 import sys
 
@@ -37,10 +36,16 @@ def draw(ax, df=None):
         df = _load_per_seed_data()
 
     summary = df.groupby('score')['auc_ectopic'].agg(['mean', 'std', 'count'])
-    summary['sem'] = summary['std'] / np.sqrt(summary['count'])
-    summary['ci'] = stats.t.ppf(0.975, summary['count'] - 1) * summary['sem']
-    summary['ci_low'] = summary['mean'] - summary['ci']
-    summary['ci_high'] = summary['mean'] + summary['ci']
+    # Bootstrap 95% CIs (non-parametric, appropriate for bounded AUC data)
+    rng = np.random.RandomState(42)
+    ci_lows, ci_highs = [], []
+    for score_name in summary.index:
+        vals = df[df['score'] == score_name]['auc_ectopic'].dropna().values
+        boot_means = np.array([rng.choice(vals, len(vals)).mean() for _ in range(2000)])
+        ci_lows.append(np.percentile(boot_means, 2.5))
+        ci_highs.append(np.percentile(boot_means, 97.5))
+    summary['ci_low'] = ci_lows
+    summary['ci_high'] = ci_highs
 
     summary = summary.sort_values('mean', ascending=True)
 

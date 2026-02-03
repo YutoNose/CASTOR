@@ -258,15 +258,20 @@ def statistical_tests(results, baseline_method="inv_pos", alpha=0.05):
     """
     Perform statistical tests comparing inv_pos to other methods.
 
-    Uses Bonferroni correction for multiple comparisons.
+    Uses Benjamini-Hochberg FDR correction for multiple comparisons.
     Significance is determined by Wilcoxon signed-rank test (non-parametric,
     appropriate for bounded AUC values).
+
+    Note: We use FDR (not Bonferroni) as the primary correction method
+    because FDR controls the expected proportion of false discoveries among
+    rejected hypotheses, providing better statistical power while remaining
+    appropriate for exploratory comparisons (Shaffer 1995).
     """
     tests = []
 
     scenarios = results["scenario"].unique() if "scenario" in results.columns else [None]
 
-    # Count total comparisons for Bonferroni correction
+    # Count total comparisons for reference
     n_comparisons = 0
     for scenario in scenarios:
         if scenario:
@@ -277,9 +282,6 @@ def statistical_tests(results, baseline_method="inv_pos", alpha=0.05):
         baseline_col = f"auc_ectopic_{baseline_method}"
         if baseline_col in data.columns:
             n_comparisons += len([c for c in auc_cols if c != baseline_col])
-
-    # Bonferroni-corrected alpha
-    alpha_corrected = alpha / max(n_comparisons, 1)
 
     for scenario in scenarios:
         if scenario:
@@ -305,10 +307,8 @@ def statistical_tests(results, baseline_method="inv_pos", alpha=0.05):
             if len(baseline_scores) != len(other_scores):
                 continue
 
-            # Paired t-test (for reference)
-            t_stat, t_pval = stats.ttest_rel(baseline_scores, other_scores)
-
-            # Wilcoxon signed-rank test (primary test - non-parametric)
+            # Wilcoxon signed-rank test (non-parametric, appropriate for
+            # bounded metrics like AUC where normality cannot be assumed)
             try:
                 w_stat, w_pval = stats.wilcoxon(baseline_scores, other_scores)
             except Exception:
@@ -320,18 +320,32 @@ def statistical_tests(results, baseline_method="inv_pos", alpha=0.05):
                 "baseline_mean": baseline_scores.mean(),
                 "method_mean": other_scores.mean(),
                 "diff": baseline_scores.mean() - other_scores.mean(),
-                "t_stat": t_stat,
-                "t_pval": t_pval,
                 "w_stat": w_stat,
                 "w_pval": w_pval,
                 "n_comparisons": n_comparisons,
-                "alpha_corrected": alpha_corrected,
-                # Use Wilcoxon p-value with Bonferroni correction for significance
-                "significant": w_pval < alpha_corrected if not np.isnan(w_pval) else False,
                 "significant_raw": w_pval < alpha if not np.isnan(w_pval) else False,
             })
 
-    return pd.DataFrame(tests)
+    df = pd.DataFrame(tests)
+
+    # Apply Benjamini-Hochberg FDR correction across all tests
+    if len(df) > 0 and "w_pval" in df.columns:
+        raw_pvals = df["w_pval"].values
+        valid_mask = ~np.isnan(raw_pvals)
+        fdr_adjusted = np.full(len(raw_pvals), np.nan)
+        if valid_mask.sum() > 0:
+            from core.evaluation import apply_fdr_correction
+            fdr_result = apply_fdr_correction(
+                raw_pvals[valid_mask].tolist(), alpha=alpha, method="fdr_bh"
+            )
+            fdr_adjusted[valid_mask] = fdr_result["p_adjusted"]
+        df["w_pval_fdr"] = fdr_adjusted
+        df["significant_fdr"] = fdr_adjusted < alpha
+        df["significant"] = df["significant_fdr"]
+    else:
+        df["significant"] = False
+
+    return df
 
 
 def plot_scenario_comparison(results, output_dir):

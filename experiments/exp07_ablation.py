@@ -108,21 +108,27 @@ def run(
     # Use all seeds for Nature Methods submission (statistical rigor)
     seeds = config.seeds
 
-    # 1. Lambda_pos ablation (keep others at default)
-    if verbose:
-        print("Ablation 1: Lambda_pos")
+    # Generate data ONCE per seed and reuse across all ablation settings.
+    # This ensures that performance differences are due to hyperparameters,
+    # not data randomness (fixes confounding between HP effect and data).
+    for seed in tqdm(seeds, desc="Seeds", disable=not verbose):
+        try:
+            X, coords, labels, _, _ = generate_synthetic_data(
+                n_spots=config.n_spots,
+                n_genes=config.n_genes,
+                n_ectopic=config.n_ectopic,
+                n_intrinsic=config.n_intrinsic,
+                n_modules=config.n_modules,
+                random_state=seed,
+            )
+        except Exception as e:
+            if verbose:
+                print(f"  Failed to generate data for seed={seed}: {e}")
+            continue
 
-    for lambda_pos in tqdm(ablation_config.lambda_pos_values, disable=not verbose):
-        for seed in seeds:
+        # 1. Lambda_pos ablation (keep others at default)
+        for lambda_pos in ablation_config.lambda_pos_values:
             try:
-                X, coords, labels, _, _ = generate_synthetic_data(
-                    n_spots=config.n_spots,
-                    n_genes=config.n_genes,
-                    n_ectopic=config.n_ectopic,
-                    n_intrinsic=config.n_intrinsic,
-                    n_modules=config.n_modules,
-                    random_state=seed,
-                )
                 result = run_ablation(
                     X, coords, labels, seed,
                     lambda_pos=lambda_pos,
@@ -136,21 +142,9 @@ def run(
                 if verbose:
                     print(f"  Failed: lambda_pos={lambda_pos}, seed={seed}: {e}")
 
-    # 2. Hidden dimension ablation
-    if verbose:
-        print("Ablation 2: Hidden dimension")
-
-    for hidden_dim in tqdm(ablation_config.hidden_dim_values, disable=not verbose):
-        for seed in seeds:
+        # 2. Hidden dimension ablation
+        for hidden_dim in ablation_config.hidden_dim_values:
             try:
-                X, coords, labels, _, _ = generate_synthetic_data(
-                    n_spots=config.n_spots,
-                    n_genes=config.n_genes,
-                    n_ectopic=config.n_ectopic,
-                    n_intrinsic=config.n_intrinsic,
-                    n_modules=config.n_modules,
-                    random_state=seed,
-                )
                 result = run_ablation(
                     X, coords, labels, seed,
                     lambda_pos=config.lambda_pos,
@@ -164,21 +158,9 @@ def run(
                 if verbose:
                     print(f"  Failed: hidden_dim={hidden_dim}, seed={seed}: {e}")
 
-    # 3. K neighbors ablation
-    if verbose:
-        print("Ablation 3: K neighbors")
-
-    for k in tqdm(ablation_config.k_neighbor_values, disable=not verbose):
-        for seed in seeds:
+        # 3. K neighbors ablation
+        for k in ablation_config.k_neighbor_values:
             try:
-                X, coords, labels, _, _ = generate_synthetic_data(
-                    n_spots=config.n_spots,
-                    n_genes=config.n_genes,
-                    n_ectopic=config.n_ectopic,
-                    n_intrinsic=config.n_intrinsic,
-                    n_modules=config.n_modules,
-                    random_state=seed,
-                )
                 result = run_ablation(
                     X, coords, labels, seed,
                     lambda_pos=config.lambda_pos,

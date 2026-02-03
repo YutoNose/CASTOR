@@ -1,7 +1,7 @@
 """
 Figure S4 Panel B: Pairwise Statistical Significance
 
-Pairwise t-test significance matrix (Bonferroni-corrected).
+Pairwise Wilcoxon signed-rank significance matrix (Bonferroni-corrected).
 """
 
 import numpy as np
@@ -53,7 +53,7 @@ def draw(ax, df=None):
             vals_j = pivot[methods[j]].dropna()
             common = vals_i.index.intersection(vals_j.index)
             if len(common) > 2:
-                _, p = stats.ttest_rel(vals_i.loc[common], vals_j.loc[common])
+                _, p = stats.wilcoxon(vals_i.loc[common], vals_j.loc[common])
             else:
                 p = np.nan  # Insufficient paired observations
             pval_matrix[i, j] = p
@@ -84,7 +84,7 @@ def draw(ax, df=None):
     ax.set_yticks(range(n))
     ax.set_xticklabels(display_names, rotation=45, ha='right', fontsize=5)
     ax.set_yticklabels(display_names, fontsize=5)
-    ax.set_title(f'Pairwise t-test ({correction_label})', fontsize=6, pad=4)
+    ax.set_title(f'Pairwise Wilcoxon ({correction_label})', fontsize=6, pad=4)
 
     legend_elements = [
         Patch(facecolor='white', edgecolor='black', label='n.s.'),

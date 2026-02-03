@@ -18,6 +18,7 @@ This creates REAL ectopic anomalies: tumor expression at normal positions.
 No fabricated data. No fallbacks.
 """
 
+import gzip
 import numpy as np
 import pandas as pd
 from scipy import sparse, stats
@@ -160,6 +161,7 @@ def evaluate_transplant_detection(
     seed: int,
     config: ExperimentConfig,
     n_top_genes: int = 2000,
+    X_original: np.ndarray = None,
 ) -> dict:
     """
     Train model on modified data and evaluate detection of transplanted spots.
@@ -178,6 +180,9 @@ def evaluate_transplant_detection(
         Configuration
     n_top_genes : int
         Number of HVGs for training
+    X_original : np.ndarray
+        Pre-transplant expression matrix for HVG selection.
+        Required to avoid data leakage from transplanted spots.
 
     Returns
     -------
@@ -186,11 +191,14 @@ def evaluate_transplant_detection(
     # Set all random seeds for reproducibility (numpy + torch)
     set_seed(seed)  # Also sets torch.manual_seed internally
 
-    # HVG selection
-    gene_means = X_modified.mean(axis=0) + 1e-8
-    gene_vars = X_modified.var(axis=0)
+    # HVG selection on pre-transplant data to avoid data leak
+    if X_original is None:
+        raise ValueError("X_original is required for HVG selection to avoid data leakage")
+    X_for_hvg = X_original
+    gene_means = X_for_hvg.mean(axis=0) + 1e-8
+    gene_vars = X_for_hvg.var(axis=0)
     fano = gene_vars / gene_means
-    n_select = min(n_top_genes, X_modified.shape[1])
+    n_select = min(n_top_genes, X_for_hvg.shape[1])
     hvg_idx = np.argsort(fano)[-n_select:]
     hvg_idx = np.sort(hvg_idx)
     X_hvg = X_modified[:, hvg_idx]
@@ -333,7 +341,6 @@ def run_transplantation_experiment(
         )
 
         # Align labels with counts (same order as loader.load())
-        import gzip
         counts_file = loader.counts_dir / f"{sample_id}.tsv.gz"
         with gzip.open(counts_file, "rt") as f:
             counts_df = pd.read_csv(f, sep="\t", index_col=0)
@@ -370,6 +377,7 @@ def run_transplantation_experiment(
                 transplant["transplant_mask"],
                 seed=seed,
                 config=config,
+                X_original=transplant["X_original"],
             )
 
             # Add metadata

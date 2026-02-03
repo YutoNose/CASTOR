@@ -87,6 +87,10 @@ EXPERIMENTS = {
     18: ("Interpretability", "exp18_interpretability", "exp18_interpretability.csv"),
     19: ("Clustered Ectopic", "exp19_clustered_ectopic", "exp19_clustered_ectopic.csv"),
     20: ("Region Transplantation", "exp20_region_transplantation", "exp20_region_transplantation.csv"),
+    21: ("Prevalence Sensitivity", "exp21_prevalence_sensitivity", "exp21_prevalence_sensitivity.csv"),
+    22: ("Mixed Anomaly", "exp22_mixed_anomaly", "exp22_mixed_anomaly.csv"),
+    23: ("Graph Sensitivity", "exp23_graph_sensitivity", "exp23_graph_sensitivity.csv"),
+    24: ("FP Characterization", "exp24_fp_characterization", "exp24_fp_characterization.csv"),
 }
 
 # =============================================================================
@@ -109,6 +113,10 @@ FIGURES = {
     "S6": ("Synthetic Data", "figS6", ["a", "b", "c", "d"]),
     "8": ("Clustered Advantage", "fig8", ["a", "b", "c"]),
     "9": ("Region Transplantation", "fig9", ["a", "b", "c", "d"]),
+    "10": ("Prevalence Sensitivity", "fig10", ["a", "b", "c"]),
+    "11": ("Mixed Anomaly", "fig11", ["a", "b", "c"]),
+    "S7": ("Graph Sensitivity", "figS7", ["a", "b", "c"]),
+    "S8": ("FP Characterization", "figS8", ["a", "b", "c", "d"]),
 }
 
 # =============================================================================

@@ -166,6 +166,22 @@ def _draw_scenario_panel(ax):
             ha='center', va='top', color='gray', fontstyle='italic')
 
 
+def _bootstrap_ci(values, confidence=0.95, n_bootstrap=10000, seed=42):
+    """Compute bootstrap confidence interval for the mean."""
+    rng = np.random.RandomState(seed)
+    values = values.dropna().values if hasattr(values, 'dropna') else np.asarray(values)
+    n = len(values)
+    if n < 2:
+        return values.mean() if n == 1 else np.nan, 0.0, 0.0
+    boot_means = np.array([rng.choice(values, size=n, replace=True).mean()
+                           for _ in range(n_bootstrap)])
+    alpha = 1 - confidence
+    ci_lower = np.percentile(boot_means, 100 * alpha / 2)
+    ci_upper = np.percentile(boot_means, 100 * (1 - alpha / 2))
+    mean_val = values.mean()
+    return mean_val, mean_val - ci_lower, ci_upper - mean_val
+
+
 def _draw_bar_chart_panel(ax, df):
     """Draw panel (b) content: grouped bar chart across scenarios."""
     # Filter to scenarios that exist in the data
@@ -182,14 +198,18 @@ def _draw_bar_chart_panel(ax, df):
     for i, col in enumerate(method_cols):
         name, color = SCENARIO_METHODS[col]
         means = []
-        stds = []
+        ci_lower = []
+        ci_upper = []
         for scenario in available:
             sub = df[df['scenario'] == scenario]
-            means.append(sub[col].mean())
-            stds.append(sub[col].std())
+            m, lo, hi = _bootstrap_ci(sub[col])
+            means.append(m)
+            ci_lower.append(lo)
+            ci_upper.append(hi)
 
         offsets = x_pos + (i - len(method_cols)/2 + 0.5) * width
-        ax.bar(offsets, means, width, yerr=stds, capsize=2,
+        ax.bar(offsets, means, width,
+               yerr=[ci_lower, ci_upper], capsize=2,
                label=name, color=color,
                edgecolor='black', linewidth=0.3)
 
@@ -197,9 +217,15 @@ def _draw_bar_chart_panel(ax, df):
     labels = [SCENARIO_LABELS.get(s, s) for s in available]
     ax.set_xticklabels(labels, fontsize=6)
     ax.set_ylabel('Ectopic Detection AUC', fontsize=7)
-    ax.set_ylim(0, 1.15)
+    ax.set_ylim(0, 1.05)
     ax.axhline(0.5, color='gray', linestyle=':', linewidth=0.5, alpha=0.7)
     ax.legend(loc='upper right', fontsize=5)
+
+    n_seeds = df.groupby('scenario').size().median()
+    ax.text(0.98, 0.02, f'Error bars: 95% CI (bootstrap, n={int(n_seeds)})',
+            transform=ax.transAxes, fontsize=5, ha='right', va='bottom',
+            color='gray',
+            bbox=dict(facecolor='white', edgecolor='none', alpha=0.85, pad=1.5))
 
     # Highlight hard ectopic scenarios
     for scenario_name in ['hard_ectopic', 'hardest']:
@@ -225,9 +251,10 @@ def _draw_hard_ectopic_panel(ax, df):
         name, color = SCENARIO_METHODS[col]
         vals = hard_df[col].dropna()
         if len(vals) > 0:
+            m, ci_lo, ci_hi = _bootstrap_ci(vals)
             method_data.append({
                 'name': name, 'color': color,
-                'mean': vals.mean(), 'std': vals.std(),
+                'mean': m, 'ci_lo': ci_lo, 'ci_hi': ci_hi,
             })
 
     # Sort by mean AUC
@@ -235,21 +262,27 @@ def _draw_hard_ectopic_panel(ax, df):
 
     names = [m['name'] for m in method_data]
     means = [m['mean'] for m in method_data]
-    stds = [m['std'] for m in method_data]
+    ci_lo = [m['ci_lo'] for m in method_data]
+    ci_hi = [m['ci_hi'] for m in method_data]
     colors = [m['color'] for m in method_data]
 
     y_pos = np.arange(len(names))
-    ax.barh(y_pos, means, xerr=stds, capsize=3,
+    ax.barh(y_pos, means, xerr=[ci_lo, ci_hi], capsize=3,
             color=colors, edgecolor='black', linewidth=0.3)
 
     ax.set_yticks(y_pos)
     ax.set_yticklabels(names, fontsize=6)
     ax.set_xlabel('Ectopic Detection AUC', fontsize=7)
-    ax.set_xlim(0, 1.1)
+    ax.set_xlim(0, 1.05)
     ax.axvline(0.5, color='gray', linestyle=':', linewidth=0.5, alpha=0.7)
 
-    for i, (m, s) in enumerate(zip(means, stds)):
-        ax.text(min(m + s + 0.03, 1.05), i, f'{m:.2f}', va='center', fontsize=5)
+    for i, (m, hi) in enumerate(zip(means, ci_hi)):
+        ax.text(min(m + hi + 0.03, 1.02), i, f'{m:.2f}', va='center', fontsize=5)
+
+    ax.text(0.98, 0.02, 'Error bars: 95% CI (bootstrap)',
+            transform=ax.transAxes, fontsize=5, ha='right', va='bottom',
+            color='gray',
+            bbox=dict(facecolor='white', edgecolor='none', alpha=0.85, pad=1.5))
 
 
 # =============================================================================

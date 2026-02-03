@@ -21,9 +21,9 @@ dependencies:
   - scipy>=1.10
   - scikit-learn>=1.3
 
-  # PyTorch with CUDA
+  # PyTorch with CUDA (matches pyproject.toml cu121 index)
   - pytorch>=2.0
-  - pytorch-cuda=11.8
+  - pytorch-cuda=12.1
 
   # Spatial transcriptomics
   - scanpy>=1.9
